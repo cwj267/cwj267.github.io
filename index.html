@@ -13,7 +13,8 @@
   <!-- 为Windows Mobile设备设置状态栏颜色 -->
   <meta name="msapplication-navbutton-color" content="#ffffff" />
   
-  <title>电子书阅读器V0.5.2</title>
+  <title>电子书阅读器V0.5.3</title>
+  <script src="https://cdn.jsdelivr.net/npm/jschardet@3.0.0/dist/jschardet.min.js"></script>
   <script>
     // 全局变量定义
     let loadedChapters = []; // 用于跟踪已加载的章节索引
@@ -4507,7 +4508,7 @@
 </head>
 <body>
   <!-- 文件输入隐藏组件 -->
-  <input type="file" id="fileInput" accept=".txt,.mobi" style="display: none;" title="选择TXT或MOBI文件" />
+  <input type="file" id="fileInput" accept=".txt" style="display: none;" title="选择TXT文件" />
 
   <!-- 书籍缓存页面 -->
   <div id="booksPage" style="display: flex;">
@@ -5295,13 +5296,8 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       }
       
       const file = e.dataTransfer.files[0];
-      if (file) {
-        const ext = (file.name || '').toLowerCase().split('.').pop();
-        if (ext === 'txt' || ext === 'mobi' || (file.type && file.type.startsWith('text'))) {
-          processFile(file);
-        } else {
-          showToast('不支持的文件类型：' + (ext || file.type || '未知'), 'error');
-        }
+      if (file && file.type === 'text/plain') {
+        processFile(file);
       }
     }
 
@@ -5943,622 +5939,100 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       // 为文件创建唯一标识
       currentFileId = file.name + '_' + file.size + '_' + file.lastModified;
       
-      const ext = (file.name || '').toLowerCase().split('.').pop();
-      if (ext === 'mobi') {
-        processMobi(file);
-        return;
-      }
-      // 默认按txt处理
-      processTxt(file);
-    }
-
-    // 解析TXT（支持多种Unicode编码：UTF-8、UTF-16LE/BE、UTF-32LE/BE）
-    function processTxt(file) {
+      // 显示加载提示
+      showToast('正在识别文件格式和编码...', 'info');
+      
       const reader = new FileReader();
-      reader.onload = function(evt) {
+      
+      // 关键：必须读取为 ArrayBuffer (二进制)，不能直接 readAsText
+      reader.readAsArrayBuffer(file);
+      
+      reader.onload = async function(e) {
         try {
-          const buffer = evt.target.result;
-          const encoding = detectUnicodeEncoding(buffer) || 'utf-8';
-          let text = '';
-          if (encoding === 'utf-8' || encoding === 'utf-16le' || encoding === 'utf-16be') {
-            const decoder = new TextDecoder(encoding, { fatal: false });
-            text = decoder.decode(new Uint8Array(buffer));
-          } else if (encoding === 'utf-32le' || encoding === 'utf-32be') {
-            text = decodeUTF32(buffer, encoding === 'utf-32le');
-          } else {
-            const decoder = new TextDecoder('utf-8', { fatal: false });
-            text = decoder.decode(new Uint8Array(buffer));
+          const buffer = e.target.result;
+          const uint8Array = new Uint8Array(buffer);
+          
+          // 1. 使用 jschardet 检测编码 (取前 20KB 采样检测，提高速度)
+          // TXT文件如果很大，检测整个文件会很慢，通常检测头部即可
+          const sampleSize = Math.min(uint8Array.length, 20000);
+          const sample = uint8Array.subarray(0, sampleSize);
+          
+          // 将 Uint8Array 转为二进制作符串供 jschardet 检测
+          let binaryString = "";
+          for (let i = 0; i < sample.length; i++) {
+            binaryString += String.fromCharCode(sample[i]);
           }
           
-          // 如果看起来仍有编码问题，尝试另一种UTF-16方向
-          if (hasEncodingErrors(text)) {
-            try {
-              const decoderAlt = new TextDecoder(encoding === 'utf-16le' ? 'utf-16be' : 'utf-16le', { fatal: false });
-              text = decoderAlt.decode(new Uint8Array(buffer));
-            } catch (e) {}
+          const detected = jschardet.detect(binaryString);
+          let encoding = detected.encoding || 'utf-8';
+          let confidence = detected.confidence || 0;
+          
+          // 修正一些常见的识别偏差
+          if (encoding.toLowerCase() === 'gb2312' || encoding.toLowerCase() === 'ascii') {
+            encoding = 'gb18030'; // 强制使用更大的中文集
           }
           
-          volData = parseText(text);
-          continueProcessingFile(text, file);
-        } catch (error) {
-          console.error('TXT解析失败:', error);
-          showToast('TXT解析失败：' + error.message, 'error');
-        }
-      };
-      reader.onerror = function() {
-        showToast('文件读取失败', 'error');
-      };
-      reader.readAsArrayBuffer(file);
-    }
-
-    // MOBI解析（优先适配非DRM、PalmDOC压缩的MOBI，其他情况友好提示）
-    function processMobi(file) {
-      const reader = new FileReader();
-      reader.onload = function(evt) {
-        try {
-          const buffer = evt.target.result;
-          const bytes = new Uint8Array(buffer);
-          const mobiOffsetGuess = findAscii(bytes, 'MOBI');
-          if (mobiOffsetGuess < 0) {
-            showToast('未检测到MOBI标记，可能是DRM或非常规MOBI。建议转换为TXT/EPUB。', 'warning');
-            return;
-          }
-          const text = extractMobiText(bytes);
-          if (text && text.trim().length > 0) {
-            // 若是HTML内容，先做清洗以适配纯文本解析
-            const cleaned = /<\s*html[\s>]/i.test(text) ? stripHtml(text) : text;
-            volData = parseText(cleaned);
-            continueProcessingFile(cleaned, file);
-            showToast('MOBI解析完成（PalmDOC/无压缩优先，KF8/HUFF暂不完整）', 'success');
-          } else {
-            showToast('MOBI解析失败或为空。建议转换为TXT/EPUB。', 'error');
-          }
-        } catch (err) {
-          console.error('MOBI解析错误:', err);
-          showToast('MOBI解析错误：' + err.message, 'error');
-        }
-      };
-      reader.onerror = function() {
-        showToast('文件读取失败', 'error');
-      };
-      reader.readAsArrayBuffer(file);
-    }
-
-    // 识别Unicode编码（基于BOM或字节特征）
-    function detectUnicodeEncoding(buffer) {
-      const bytes = new Uint8Array(buffer);
-      if (bytes.length >= 3 && bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) return 'utf-8';
-      if (bytes.length >= 2 && bytes[0] === 0xFF && bytes[1] === 0xFE) {
-        if (bytes.length >= 4 && bytes[2] === 0x00 && bytes[3] === 0x00) return 'utf-32le';
-        return 'utf-16le';
-      }
-      if (bytes.length >= 2 && bytes[0] === 0xFE && bytes[1] === 0xFF) return 'utf-16be';
-      if (bytes.length >= 4 && bytes[0] === 0x00 && bytes[1] === 0x00 && bytes[2] === 0xFE && bytes[3] === 0xFF) return 'utf-32be';
-      let zeroCount = 0;
-      for (let i = 0; i < Math.min(bytes.length, 1024); i++) if (bytes[i] === 0x00) zeroCount++;
-      const ratio = zeroCount / Math.min(bytes.length, 1024);
-      if (ratio > 0.4) {
-        let secondByteZero = 0;
-        for (let i = 1; i < Math.min(bytes.length, 1024); i += 2) if (bytes[i] === 0x00) secondByteZero++;
-        if (secondByteZero > (Math.min(bytes.length, 1024) / 4)) return 'utf-16le';
-        return 'utf-16be';
-      }
-      return null;
-    }
-
-    // 解码UTF-32（LE/BE）
-    function decodeUTF32(buffer, isLE) {
-      const view = new DataView(buffer);
-      let offset = 0;
-      if (view.byteLength >= 4) {
-        const bom = view.getUint32(0, false);
-        if (bom === 0x0000FEFF) { offset = 4; }
-        if (bom === 0xFFFE0000) { offset = 4; }
-      }
-      const codepoints = [];
-      for (; offset + 4 <= view.byteLength; offset += 4) {
-        const cp = isLE ? view.getUint32(offset, true) : view.getUint32(offset, false);
-        if (cp === 0) continue;
-        if (cp <= 0x10FFFF) {
-          codepoints.push(cp);
-        }
-      }
-      try {
-        return String.fromCodePoint.apply(null, codepoints);
-      } catch (e) {
-        let out = '';
-        const chunkSize = 16384;
-        for (let i = 0; i < codepoints.length; i += chunkSize) {
-          out += String.fromCodePoint.apply(null, codepoints.slice(i, i + chunkSize));
-        }
-        return out;
-      }
-    }
-
-    // 在字节数组中查找ASCII签名
-    function findAscii(bytes, ascii) {
-      const sig = new TextEncoder().encode(ascii);
-      for (let i = 0; i <= bytes.length - sig.length; i++) {
-        let match = true;
-        for (let j = 0; j < sig.length; j++) {
-          if (bytes[i + j] !== sig[j]) { match = false; break; }
-        }
-        if (match) return i;
-      }
-      return -1;
-    }
-
-    // 实验性：HUFF/CDIC解码器
-    function mobiHuffDecode(bytes, offsets, textStartIndex, textEndIndex) {
-      try {
-        // 1. 找到HUFF和CDIC记录索引
-        const huffIndices = [];
-        const cdicIndices = [];
-        for (let i = 0; i < offsets.length; i++) {
-          const start = offsets[i];
-          const end = (i + 1 < offsets.length) ? offsets[i + 1] : bytes.length;
-          const chunk = bytes.slice(start, end);
-          if (findAscii(chunk, 'HUFF') >= 0) huffIndices.push(i);
-          if (findAscii(chunk, 'CDIC') >= 0) cdicIndices.push(i);
-        }
-        if (huffIndices.length === 0 || cdicIndices.length === 0) {
-          console.warn('未找到HUFF/CDIC记录');
-          return '';
-        }
-        // 2. 读取HUFF表（采用第二个HUFF记录作为树/表）
-        const huffIndex = huffIndices[Math.min(1, huffIndices.length - 1)];
-        const huffStart = offsets[huffIndex];
-        const huffEnd = (huffIndex + 1 < offsets.length) ? offsets[huffIndex + 1] : bytes.length;
-        const huffBytes = bytes.slice(huffStart, huffEnd);
-        const huff = buildSimpleHuff(huffBytes);
-        if (!huff) {
-          console.warn('解析HUFF失败');
-          return '';
-        }
-        // 3. 构建CDIC字典
-        const dict = buildCdicDictionary(bytes, offsets, cdicIndices);
-        if (!dict || dict.length === 0) {
-          console.warn('CDIC字典为空');
-          return '';
-        }
-        // 4. 解码正文记录
-        let out = '';
-        for (let i = textStartIndex; i <= textEndIndex; i++) {
-          const start = offsets[i];
-          const end = (i + 1 < offsets.length) ? offsets[i + 1] : bytes.length;
-          const rec = bytes.slice(start, end);
-          const decodedRec = decodeHuffRecord(rec, huff, dict);
-          if (decodedRec) out += decodedRec;
-          // 限制输出规模避免卡顿
-          if (out.length > 10 * 1024 * 1024) break;
-        }
-        out = out.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
-        // 若解码为HTML，做清洗
-        if (/<\s*html[\s>]/i.test(out) || /<\s*body[\s>]/i.test(out)) {
-          out = stripHtml(out);
-        }
-        return out;
-      } catch (e) {
-        console.warn('mobiHuffDecode失败:', e);
-        return '';
-      }
-    }
-
-    function buildSimpleHuff(huffBytes) {
-      // 正式版：从HUFF记录中提取码长表并构建规范哈夫曼解码映射（Canonical Huffman）
-      try {
-        const pos = findAscii(huffBytes, 'HUFF');
-        let p = pos >= 0 ? pos + 4 : 0;
-        // 启发式查找256个码长的区域（值主要在1..24之间）
-        let base = -1;
-        for (let i = p; i + 256 <= huffBytes.length; i++) {
-          let ok = 0;
-          for (let j = 0; j < 256; j++) {
-            const v = huffBytes[i + j];
-            if (v > 0 && v <= 24) ok++;
-          }
-          if (ok > 220) { base = i; break; }
-        }
-        if (base < 0) return null;
-        const codeLengths = new Array(256);
-        for (let j = 0; j < 256; j++) codeLengths[j] = huffBytes[base + j];
-        const nonZero = codeLengths.filter(l => l > 0);
-        if (nonZero.length === 0) return null;
-        const minBits = Math.min(...nonZero);
-        const maxBits = Math.max(...nonZero);
-        const counts = new Array(maxBits + 1).fill(0);
-        for (const l of codeLengths) if (l > 0) counts[l]++;
-        const firstCode = new Array(maxBits + 1).fill(0);
-        firstCode[minBits] = 0;
-        for (let b = minBits + 1; b <= maxBits; b++) {
-          firstCode[b] = (firstCode[b - 1] + counts[b - 1]) << 1;
-        }
-        const nextCode = firstCode.slice();
-        const decodeMaps = {};
-        for (let s = 0; s < codeLengths.length; s++) {
-          const l = codeLengths[s];
-          if (l > 0) {
-            const code = nextCode[l]++;
-            if (!decodeMaps[l]) decodeMaps[l] = {};
-            decodeMaps[l][code] = s;
-          }
-        }
-        return { decodeMaps, minBits, maxBits, codeLengths };
-      } catch (e) {
-        console.warn('buildSimpleHuff失败:', e);
-        return null;
-      }
-    }
-
-    function buildCdicDictionary(bytes, offsets, cdicIndices) {
-      // 正式版：按长度前缀(2字节BE)解析CDIC词典条目
-      const dict = [];
-      try {
-        for (const idx of cdicIndices) {
-          const start = offsets[idx];
-          const end = (idx + 1 < offsets.length) ? offsets[idx + 1] : bytes.length;
-          const chunk = bytes.slice(start, end);
-          const pos = findAscii(chunk, 'CDIC');
-          let i = 0;
-          if (pos >= 0) {
-            i = pos + 4; // 跳过'CDIC'
-            // 常见CDIC头部长度16或更长；这里启发式跳过16字节
-            i = Math.min(i + 16, chunk.length);
-          }
-          while (i + 2 <= chunk.length) {
-            const len = (chunk[i] << 8) | chunk[i + 1];
-            i += 2;
-            if (len <= 0) continue;
-            if (i + len > chunk.length) break;
-            const token = chunk.slice(i, i + len);
-            i += len;
-            try {
-              const txt = tryDecodeChinese(token);
-              if (txt) dict.push(txt);
-            } catch (_) {}
-            // 防御：避免巨量数据导致卡顿
-            if (dict.length > 50000) break;
-          }
-        }
-      } catch (e) {
-        console.warn('buildCdicDictionary失败:', e);
-      }
-      // 去重和清洗
-      const uniq = [];
-      const seen = new Set();
-      for (const t of dict) {
-        const s = t.trim();
-        if (!s) continue;
-        if (!seen.has(s)) { seen.add(s); uniq.push(s); }
-      }
-      return uniq;
-    }
-
-    function decodeHuffRecord(rec, huff, dict) {
-      try {
-        // 如果记录里本身包含可读HTML，则直接清洗作为解码结果
-        const probe = tryDecodeChinese(rec);
-        if (/<\s*html[\s>]/i.test(probe) || /<\s*body[\s>]/i.test(probe)) {
-          return stripHtml(probe);
-        }
-        if (!huff || !huff.decodeMaps) return '';
-        const { decodeMaps, minBits, maxBits } = huff;
-
-        // 内部：根据位序解码出符号序列
-        function decodeSyms(msbFirst) {
-          const syms = [];
-          let bitbuf = 0, bitcount = 0;
-          let pos = 0;
-          while (pos < rec.length) {
-            const b = rec[pos++];
-            if (msbFirst) {
-              bitbuf = (bitbuf << 8) | b;
-            } else {
-              bitbuf |= (b << bitcount);
-            }
-            bitcount += 8;
-            let progressed = true;
-            while (progressed) {
-              progressed = false;
-              for (let l = minBits; l <= maxBits; l++) {
-                if (bitcount < l) break;
-                const mask = (1 << l) - 1;
-                const code = msbFirst ? ((bitbuf >> (bitcount - l)) & mask) : (bitbuf & mask);
-                const map = decodeMaps[l];
-                if (map && map[code] !== undefined) {
-                  const sym = map[code];
-                  syms.push(sym);
-                  if (msbFirst) {
-                    bitcount -= l;
-                  } else {
-                    bitbuf >>= l;
-                    bitcount -= l;
+          // 显示编码检测结果
+          const encodingMsg = `检测到编码: ${encoding} (置信度: ${parseInt(confidence * 100)}%)`;
+          console.log(encodingMsg);
+          
+          // 2. 使用 TextDecoder 进行解码
+          try {
+            const decoder = new TextDecoder(encoding);
+            const text = decoder.decode(uint8Array);
+            
+            // 3. 二次检查解码结果是否有问题
+            if (hasEncodingErrors(text)) {
+              // 如果解码结果仍有问题，尝试其他常见编码
+              const fallbackEncodings = ['utf-8', 'gb18030', 'big5', 'iso-8859-1'];
+              let fallbackSuccess = false;
+              
+              for (let fallbackEncoding of fallbackEncodings) {
+                if (fallbackEncoding.toLowerCase() === encoding.toLowerCase()) continue;
+                
+                try {
+                  const fallbackDecoder = new TextDecoder(fallbackEncoding);
+                  const fallbackText = fallbackDecoder.decode(uint8Array);
+                  
+                  if (!hasEncodingErrors(fallbackText)) {
+                    text = fallbackText;
+                    encoding = fallbackEncoding;
+                    confidence = 0.9; // 手动设置高置信度
+                    fallbackSuccess = true;
+                    showToast(`使用备用编码 ${encoding} 成功解码`, 'success');
+                    break;
                   }
-                  progressed = true;
-                  break;
+                } catch (fallbackError) {
+                  console.warn(`备用编码 ${fallbackEncoding} 解码失败:`, fallbackError);
                 }
               }
-              // 失配时尝试丢弃8位重新同步
-              if (!progressed && bitcount >= 8) {
-                if (msbFirst) {
-                  bitcount -= 8;
-                } else {
-                  bitbuf >>= 8;
-                  bitcount -= 8;
-                }
+              
+              if (!fallbackSuccess) {
+                throw new Error('所有尝试的编码都无法正确解码文件');
               }
-            }
-            if (syms.length > 400000) break;
-          }
-          return syms;
-        }
-
-        // 将符号序列映射为文本，尝试不同字典基准偏移
-        function reconstruct(syms, base) {
-          const parts = [];
-          for (let k = 0; k < syms.length; k++) {
-            const s = syms[k];
-            const idx = s - base;
-            if (idx >= 0 && idx < dict.length) {
-              parts.push(dict[idx]);
-            } else if (s <= 255) {
-              const ch = s & 0xFF;
-              if (ch >= 0x20 && ch <= 0x7E) parts.push(String.fromCharCode(ch));
-            }
-            if (parts.length > 300000) break;
-          }
-          return parts.join('');
-        }
-
-        const symsMSB = decodeSyms(true);
-        const symsLSB = decodeSyms(false);
-        const bases = [0, 64, 128, 192, 256, 320, 384, 448, 512];
-        let best = { text: '', score: -Infinity, descr: '' };
-        for (const syms of [symsMSB, symsLSB]) {
-          for (const base of bases) {
-            const txt = reconstruct(syms, base);
-            let out = txt;
-            if (/<\s*html[\s>]/i.test(out) || /<\s*body[\s>]/i.test(out)) out = stripHtml(out);
-            const sc = scoreChineseText(out);
-            if (sc > best.score) best = { text: out, score: sc, descr: (syms===symsMSB?'MSB':'LSB')+` base=`+base };
-            if (sc > 0.45) break; // 质量足够时提前收敛
-          }
-        }
-        return best.text;
-      } catch (e) {
-        console.warn('decodeHuffRecord失败:', e);
-        return '';
-      }
-    }
-
-    // 粗略提取MOBI文本（仅PalmDOC压缩的基础场景；复杂/DRM不支持）
-    function extractMobiText(bytes) {
-      try {
-        if (bytes.length < 78) return '';
-        const view = new DataView(bytes.buffer);
-        const recordCount = view.getUint16(76, false); // PDB头记录数（BE）
-        const recordTableOffset = 78;
-        const offsets = [];
-        for (let i = 0; i < recordCount; i++) {
-          const off = view.getUint32(recordTableOffset + i * 8, false);
-          offsets.push(off);
-        }
-        if (offsets.length === 0) return '';
-        // 解析PalmDOC压缩类型（首记录前16字节）
-        const firstRec = offsets[0] || 0;
-        const compression = view.getUint16(firstRec, false); // 0=none,1=palmdoc,2=huff/cdic
-        // 尝试读取MOBI头，确定文本记录边界
-        let textStartIndex = 1;
-        let textEndIndex = offsets.length - 1;
-        try {
-          const mobiPos = findAscii(bytes.slice(firstRec), 'MOBI');
-          if (mobiPos >= 0) {
-            const mobiAbs = firstRec + mobiPos;
-            // firstNonBookIndex 位置常见为 MOBI 头偏移 + 0x8C（大端）
-            const firstNonBookIndex = view.getUint32(mobiAbs + 0x8C, false);
-            if (firstNonBookIndex && firstNonBookIndex > textStartIndex && firstNonBookIndex < offsets.length) {
-              textEndIndex = firstNonBookIndex - 1;
-            }
-          }
-        } catch (_) {}
-        // 收集文本记录（跳过首记录0）
-        let combined = [];
-        for (let i = textStartIndex; i <= textEndIndex; i++) {
-          const start = offsets[i];
-          const end = (i + 1 < offsets.length) ? offsets[i + 1] : bytes.length;
-          const chunk = bytes.slice(start, end);
-          combined.push(chunk);
-          if (combined.length > 512) break; // 控制内存
-        }
-        const joined = concatUint8(combined);
-        let rawBytes = joined;
-        let text = '';
-        if (compression === 0) {
-          // 无压缩，直接用中文优先的多编码尝试
-          text = tryDecodeChinese(rawBytes);
-        } else if (compression === 1) {
-          // PalmDOC压缩：先解压为字节，再中文优先解码
-          const decompressed = palmDocDecompress(rawBytes);
-          if (decompressed && decompressed.length > 0) {
-            text = tryDecodeChinese(decompressed);
-          } else {
-            text = tryDecodeChinese(rawBytes);
-          }
-        } else if (compression === 2) {
-          // HUFF/CDIC（KF8常见）：实验性解码
-          let decoded = mobiHuffDecode(bytes, offsets, textStartIndex, textEndIndex);
-          if (decoded && decoded.trim().length > 0) {
-            text = decoded;
-          } else {
-            console.warn('HUFF/CDIC尝试失败，回退到HTML清洗路径');
-            let candidate = tryDecodeChinese(rawBytes);
-            if (/<\s*html[\s>]/i.test(candidate) || /<\s*body[\s>]/i.test(candidate)) {
-              text = stripHtml(candidate);
             } else {
-              text = candidate;
+              // 编码识别成功
+              showToast(`编码识别成功: ${encoding}`, 'success');
             }
+            
+            // 4. 解析文本并继续处理
+            volData = parseText(text);
+            continueProcessingFile(text, file);
+            
+          } catch (decodeError) {
+            console.error('解码失败:', decodeError);
+            showToast(`文件编码识别失败: ${decodeError.message}`, 'error');
           }
-        } else {
-          text = tryDecodeChinese(rawBytes);
+        } catch (error) {
+          console.error('文件处理错误:', error);
+          showToast(`文件处理失败: ${error.message}`, 'error');
         }
-        text = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
-        return extractChineseOnly(text);
-      } catch (e) {
-        console.warn('extractMobiText失败:', e);
-        return '';
-      }
-    }
-
-    function concatUint8(chunks) {
-      let total = 0;
-      for (const c of chunks) total += c.length;
-      const out = new Uint8Array(total);
-      let offset = 0;
-      for (const c of chunks) { out.set(c, offset); offset += c.length; }
-      return out;
-    }
-
-    // PalmDOC解压（简化实现，仅支持常见LZ77变体；复杂场景可能失败）
-    function palmDocDecompress(data) {
-      try {
-        let pos = 0;
-        const out = [];
-        while (pos < data.length) {
-          const c = data[pos++];
-          if (c === 0x00) {
-            out.push(0x20);
-          } else if (c >= 0x01 && c <= 0x08) {
-            for (let i = 0; i < c; i++) if (pos < data.length) out.push(data[pos++]);
-          } else if (c >= 0x09 && c <= 0x7F) {
-            out.push(c);
-          } else if (c >= 0x80) {
-            if (pos >= data.length) break;
-            const c2 = data[pos++];
-            const distance = ((c & 0x3F) << 8) | c2;
-            let length = (c >> 6) + 3;
-            while (pos < data.length && data[pos] >= 0x20 && data[pos] <= 0x3F) {
-              length += data[pos++] - 0x1F;
-            }
-            const start = out.length - distance;
-            for (let i = 0; i < length; i++) {
-              const b = out[start + i];
-              if (b === undefined) break;
-              out.push(b);
-            }
-          }
-        }
-        return new Uint8Array(out);
-      } catch (e) {
-        console.warn('PalmDOC解压失败:', e);
-        return null;
-      }
-    }
-
-    // 将HTML内容转换为纯文本（保留段落和换行）
-    function stripHtml(html) {
-      if (!html) return '';
-      // 移除脚本和样式
-      html = html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '');
-      // 统一换行标签为\n
-      html = html.replace(/<\s*br\s*\/?>/gi, '\n');
-      html = html.replace(/<\s*\/p\s*>/gi, '\n');
-      html = html.replace(/<\s*div\s*>/gi, '\n');
-      html = html.replace(/<\s*\/div\s*>/gi, '\n');
-      // 移除所有标签
-      let text = html.replace(/<[^>]+>/g, '');
-      // 解码HTML实体
-      text = decodeHtmlEntities(text);
-      // 压缩多余空行
-      text = text.replace(/\n{3,}/g, '\n\n');
-      return text.trim();
-    }
-
-    function decodeHtmlEntities(str) {
-      if (!str) return '';
-      const named = { '&nbsp;': ' ', '&lt;': '<', '&gt;': '>', '&amp;': '&', '&quot;': '"', '&apos;': "'" };
-      str = str.replace(/&(nbsp|lt|gt|amp|quot|apos);/g, (m) => named[m] || m);
-      // 数字实体
-      str = str.replace(/&#(\d+);/g, (m, code) => {
-        code = parseInt(code, 10);
-        if (code > 0 && code <= 0x10FFFF) return String.fromCodePoint(code);
-        return m;
-      });
-      str = str.replace(/&#x([0-9a-fA-F]+);/g, (m, hex) => {
-        const code = parseInt(hex, 16);
-        if (code > 0 && code <= 0x10FFFF) return String.fromCodePoint(code);
-        return m;
-      });
-      return str;
-    }
-
-    // 多编码尝试，优先中文显示
-    function tryDecodeChinese(buf) {
-      const candidates = ['utf-8', 'gb18030', 'gbk', 'big5', 'windows-1252'];
-      let best = { text: '', score: -Infinity, enc: '' };
-      for (const enc of candidates) {
-        try {
-          const text = new TextDecoder(enc, { fatal: false }).decode(buf);
-          const sc = scoreChineseText(text);
-          if (sc > best.score) best = { text, score: sc, enc };
-        } catch (_) {}
-      }
-      return best.text || new TextDecoder('utf-8', { fatal: false }).decode(buf);
-    }
-
-    function scoreChineseText(text) {
-      if (!text) return -Infinity;
-      const total = Math.max(text.length, 1);
-      const chinese = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
-      const replacement = (text.match(/[\ufffd]/g) || []).length;
-      // 中文比例越高越好，替换符越多越差
-      return (chinese / total) * 1.0 - (replacement / total) * 2.0;
-    }
-    
-    // 仅保留中文文本的清理与段落提取
-    function extractChineseOnly(text) {
-      if (!text) return '';
-      // HTML先清洗
-      if (/<\s*html[\s>]/i.test(text) || /<\s*body[\s>]/i.test(text) || /<[^>]+>/i.test(text)) {
-        text = stripHtml(text);
-      }
-      // 统一换行与实体
-      text = text.replace(/\r\n/g, "\n").replace(/\u00A0/g, ' ');
-      text = decodeHtmlEntities(text);
-      // 清理明显噪音：长串替换符、标记残骸
-      text = text.replace(/[\ufffd]{2,}/g, ' ').replace(/<[^>]+>/g, '');
-      // 在中文标点处断句
-      text = text.replace(/([。！？；\?\!])+/g, '$1\n');
-      // 拆分行
-      const lines = text.split(/\n+/);
-      const out = [];
-      const seen = new Set();
-      for (let raw of lines) {
-        let s = raw.trim();
-        if (!s) continue;
-        // 去掉HTML实体残留和多余空格
-        s = s.replace(/&[a-zA-Z0-9#]+;/g, '').replace(/\s{2,}/g, ' ').trim();
-        // 过滤包含过多非中文的噪音行
-        const chinese = (s.match(/[\u4e00-\u9fff]/g) || []).length;
-        const total = s.length;
-        const replacement = (s.match(/[\ufffd]/g) || []).length;
-        const ratio = chinese / Math.max(total, 1);
-        if (chinese < 3) continue; // 至少3个中文
-        if (replacement / Math.max(total, 1) > 0.05) continue; // 替换符过多
-        if (ratio < 0.25 && chinese < 8) continue; // 中文比例太低
-        // 过滤仍含明显标签或控制字符
-        if (/[<>]{2,}/.test(s)) continue;
-        // 合并重复
-        const key = s;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        out.push(s);
-        if (out.length > 200000) break;
-      }
-      // 合并为段落文本
-      let result = out.join('\n');
-      // 压缩空行
-      result = result.replace(/\n{3,}/g, '\n\n');
-      return result.trim();
+      };
+      
+      reader.onerror = function(err) {
+        console.error('文件读取错误:', err);
+        showToast('文件读取失败，请检查文件是否被占用或损坏', 'error');
+      };
     }
     
     // 检查文本是否有编码错误
