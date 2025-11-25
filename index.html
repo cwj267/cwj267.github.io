@@ -13,7 +13,7 @@
   <!-- 为Windows Mobile设备设置状态栏颜色 -->
   <meta name="msapplication-navbutton-color" content="#ffffff" />
   
-  <title>电子书阅读器V0.5.3</title>
+  <title>电子书阅读器V0.5.4</title>
   <script src="https://cdn.jsdelivr.net/npm/jschardet@3.0.0/dist/jschardet.min.js"></script>
   <script>
     // 全局变量定义
@@ -7048,26 +7048,42 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
             
             // 用于跟踪是否在对话内部
             let inDialog = false;
-            let result = '';
             let currentPara = '';
             
-            // 逐个字符处理，以避免在对话内部的句号处分割
+            // 逐个字符处理，确保所有句号和句号后带引号的情况都能正确换行
             for (let i = 0; i < para.length; i++) {
               const char = para[i];
               currentPara += char;
               
               // 检查对话开始符号
-              if (char === dialogPrefix && i === para.indexOf(dialogPrefix, i)) {
+              if (char === dialogPrefix) {
                 inDialog = true;
               }
               // 检查对话结束符号
-              else if (char === dialogSuffix && i === para.indexOf(dialogSuffix, i)) {
+              else if (char === dialogSuffix) {
                 inDialog = false;
               }
               // 如果遇到句号且不在对话中，进行分割
               else if (char === '。' && !inDialog) {
-                newParagraphs.push(currentPara);
+                // 检查句号后是否有引号
+                if (i + 1 < para.length && para[i + 1] === '”') {
+                  // 保留当前字符和下一个引号字符
+                  currentPara += para[i + 1];
+                  i++; // 跳过下一个字符
+                }
+                
+                // 将当前段落添加到新段落数组中
+                if (currentPara.trim()) {
+                  newParagraphs.push(currentPara);
+                }
+                
+                // 重置当前段落，不保留任何空格
                 currentPara = '';
+                
+                // 跳过句号后的所有空格
+                while (i + 1 < para.length && para[i + 1] === ' ') {
+                  i++;
+                }
               }
             }
             
@@ -7080,7 +7096,10 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
             newParagraphs.push(para);
           }
         });
-        paragraphs = newParagraphs;
+        // 确保不会丢失任何内容，只在有新段落时替换
+        if (newParagraphs.length > 0) {
+          paragraphs = newParagraphs;
+        }
       }
       
       // 输出段落信息用于调试
@@ -7160,6 +7179,11 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         
         // 避免不必要的变量创建
         let text = paragraph;
+        
+        // 当启用句号换行功能时，去除文本中的所有空格
+        if (window.renderVariables.isPeriodLineBreakEnabled) {
+          text = text.replace(/\s/g, '');
+        }
         
         // 应用对话高亮（引号内内容）
         if (window.renderVariables.isDialogHighlightEnabled) {
@@ -7437,12 +7461,64 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
     
     // 切换句号换行功能
     function togglePeriodLineBreak() {
+      // 切换状态
       window.renderVariables.isPeriodLineBreakEnabled = !window.renderVariables.isPeriodLineBreakEnabled;
+      
+      // 立即并明确地更新所有相关的开关按钮UI状态
+      updatePeriodLineBreakToggleUI();
+      
       // 保存设置
       saveProgress();
+      
       // 重新渲染章节内容以应用更改
       window.forceRerender = true;
       renderChapterContent();
+    }
+    
+    // 专门用于更新句号换行开关UI的函数
+    function updatePeriodLineBreakToggleUI() {
+      // 查找所有可能包含开关的function-item
+      const functionItems = document.querySelectorAll('.function-item');
+      let found = false;
+      
+      for (const item of functionItems) {
+        const title = item.querySelector('.function-title');
+        if (title && title.textContent && title.textContent.includes('句号换行')) {
+          const toggleSwitch = item.querySelector('.toggle-switch');
+          if (toggleSwitch) {
+            // 强制更新开关状态
+            if (window.renderVariables.isPeriodLineBreakEnabled) {
+              toggleSwitch.classList.remove('off');
+              // 立即应用样式变化，避免移动端延迟
+              toggleSwitch.offsetHeight; // 触发重绘
+            } else {
+              toggleSwitch.classList.add('off');
+              // 立即应用样式变化，避免移动端延迟
+              toggleSwitch.offsetHeight; // 触发重绘
+            }
+            found = true;
+          }
+        }
+      }
+      
+      // 如果没有找到，尝试通过其他方式查找
+      if (!found) {
+        const toggleSwitches = document.querySelectorAll('.toggle-switch');
+        for (const switchEl of toggleSwitches) {
+          const parentItem = switchEl.closest('.function-item');
+          if (parentItem) {
+            const title = parentItem.querySelector('.function-title');
+            if (title && title.textContent && title.textContent.includes('句号换行')) {
+              if (window.renderVariables.isPeriodLineBreakEnabled) {
+                switchEl.classList.remove('off');
+              } else {
+                switchEl.classList.add('off');
+              }
+              break;
+            }
+          }
+        }
+      }
     }
     
     // renderChapter函数正常工作，不需要增强处理
@@ -7451,6 +7527,23 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
     function renderFunctionContent() {
       // 在sidebar-right中添加tab栏，确保它在functionContent上方
       const sidebarRight = document.getElementById('sidebarRight');
+      
+      // 确保updatePeriodLineBreakToggleUI函数存在
+      if (typeof updatePeriodLineBreakToggleUI !== 'function') {
+        // 如果函数不存在，定义一个简化版本
+        window.updatePeriodLineBreakToggleUI = function() {
+          const functionItems = document.querySelectorAll('.function-item');
+          for (const item of functionItems) {
+            const title = item.querySelector('.function-title');
+            if (title && title.textContent && title.textContent.includes('句号换行')) {
+              const toggleSwitch = item.querySelector('.toggle-switch');
+              if (toggleSwitch) {
+                toggleSwitch.classList.toggle('off', !window.renderVariables.isPeriodLineBreakEnabled);
+              }
+            }
+          }
+        };
+      }
       
       // 检查是否已经有tab栏，如果没有则添加
       if (!sidebarRight.querySelector('.function-tabs')) {
@@ -7593,6 +7686,15 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         <div class="function-divider"></div>
         
       `;
+      
+      // 延迟一点时间确保DOM已完全更新，然后更新开关状态
+      setTimeout(() => {
+        if (typeof updatePeriodLineBreakToggleUI === 'function') {
+          updatePeriodLineBreakToggleUI();
+        } else if (typeof window.updatePeriodLineBreakToggleUI === 'function') {
+          window.updatePeriodLineBreakToggleUI();
+        }
+      }, 50);
     }
     
     // 搜索关键词变量
@@ -11651,7 +11753,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
           window.renderVariables.accentColor = '#0c8ce9';
           break;
         case 'dark':
-          window.renderVariables.textColor = '#e0e0e0';
+          window.renderVariables.textColor = '#ffffff';
           window.renderVariables.backgroundColor = '#000000';
           window.renderVariables.accentColor = '#4a9eff';
           break;
@@ -11770,7 +11872,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         // 根据系统主题设置默认颜色
         switch (currentTheme) {
           case 'dark':
-            window.renderVariables.textColor = '#e0e0e0';
+            window.renderVariables.textColor = '#ffffff';
             window.renderVariables.backgroundColor = '#000000';
             window.renderVariables.accentColor = '#4a9eff';
             break;
@@ -11961,7 +12063,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
           // 根据主题设置默认颜色
           switch (theme) {
             case 'dark':
-              window.renderVariables.textColor = '#e0e0e0';
+              window.renderVariables.textColor = '#ffffff';
               window.renderVariables.backgroundColor = '#000000';
               window.renderVariables.accentColor = '#4a9eff';
               break;
@@ -19280,7 +19382,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
           'yellow': '#fff1c2',
           'blue': '#d1e0ff',
           'red': '#ffd1d1',
-          'gray': '#e0e0e0'
+          'gray': '#ffffff'
         };
         const colorValue = colorMap[dialogHighlightColor] || colorMap['yellow'];
         document.documentElement.style.setProperty('--dialog-highlight-color', colorValue);
