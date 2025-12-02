@@ -13,7 +13,7 @@
   <!-- 为Windows Mobile设备设置状态栏颜色 -->
   <meta name="msapplication-navbutton-color" content="#ffffff" />
   
-  <title>电子书阅读器V0.5.4</title>
+  <title>电子书阅读器V0.5.5</title>
   <script src="https://cdn.jsdelivr.net/npm/jschardet@3.0.0/dist/jschardet.min.js"></script>
   <script>
     // 全局变量定义
@@ -1788,6 +1788,7 @@
       padding: 0 2px;
       position: relative;
       z-index: 2;
+      /* 移除固定的字体颜色设置 */
       /* 可根据需要调整 */
     }
     
@@ -1807,6 +1808,11 @@
       z-index: 2;
     }
     
+    /* 下划线高亮带字体颜色 */
+    .highlight-dialog.underline.font-highlight {
+      color: var(--dialog-highlight-color); /* 字体颜色与下划线颜色保持一致 */
+    }
+    
     /* 对话高亮颜色 - 浅色模式 */
     :root {
       --dialog-highlight-yellow: #fff1c2;
@@ -1817,10 +1823,10 @@
     
     /* 对话高亮颜色 - 深色模式 */
     [data-theme="dark"] {
-      --dialog-highlight-yellow: #5c553c;
-      --dialog-highlight-blue: #2b3a4a;
-      --dialog-highlight-red: #4a2b2b;
-      --dialog-highlight-gray: #333333;
+      --dialog-highlight-yellow: #a59570;
+      --dialog-highlight-blue: #6083b5;
+      --dialog-highlight-red: #a55e5e;
+      --dialog-highlight-gray: #707070;
     }
     
     /* 对话高亮颜色 - 护眼模式 */
@@ -3964,7 +3970,7 @@
     }
     /* 正文大标题左对齐样式 */
     .chapter-main-title {
-      font-size: 20px;
+      font-size: 32px;
       font-weight: 700;
       color: var(--text-color);
       text-align: left;
@@ -5024,6 +5030,7 @@
       isDialogHighlightEnabled: false, // 对话高亮开关
       dialogHighlightColor: 'yellow', // 对话高亮背景色（使用CSS变量名）
       dialogHighlightType: 'background', // 对话高亮类型（'background'或'underline'）
+      dialogHighlightFontColor: 'yellow', // 对话高亮字体颜色，默认与背景色相同
       dialogPrefix: '“', // 对话前符号
       dialogSuffix: '”', // 对话后符号
 
@@ -5132,25 +5139,78 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
     
     // 打开IndexedDB数据库
     function openDB() {
+      // 首先检查浏览器是否支持IndexedDB
+      if (!('indexedDB' in window)) {
+        console.warn('浏览器不支持IndexedDB，将使用localStorage作为后备方案');
+        // 返回一个模拟的Promise，让调用者可以优雅地降级处理
+        return Promise.reject(new Error('浏览器不支持IndexedDB'));
+      }
+      
       return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, DB_VERSION);
-        
-        request.onupgradeneeded = function(event) {
-          const db = event.target.result;
-          // 创建存储对象，存储文件内容
-          if (!db.objectStoreNames.contains(STORE_NAME)) {
-            db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-          }
-        };
-        
-        request.onsuccess = function(event) {
-          resolve(event.target.result);
-        };
-        
-        request.onerror = function(event) {
-          console.error('打开IndexedDB失败:', event.target.error);
-          reject(event.target.error);
-        };
+        try {
+          const request = indexedDB.open(DB_NAME, DB_VERSION);
+          
+          request.onupgradeneeded = function(event) {
+            try {
+              const db = event.target.result;
+              console.log('数据库升级中，当前版本:', event.oldVersion, '目标版本:', event.newVersion);
+              
+              // 处理不同版本的升级
+              if (event.oldVersion < 1) {
+                // 创建存储对象，存储文件内容
+                if (!db.objectStoreNames.contains(STORE_NAME)) {
+                  const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+                  // 为常用查询创建索引
+                  store.createIndex('timestamp', 'timestamp', { unique: false });
+                  console.log('成功创建存储对象和索引');
+                }
+              }
+              
+              // 如果需要升级数据库版本，可以在这里添加新的升级逻辑
+              // 例如：if (event.oldVersion < 2) { ... }
+            } catch (upgradeError) {
+              console.error('数据库升级失败:', upgradeError);
+              // 升级失败不应该导致整个操作失败，可以继续使用旧版本
+            }
+          };
+          
+          request.onsuccess = function(event) {
+            const db = event.target.result;
+            
+            // 添加版本检查和兼容性处理
+            console.log('成功打开IndexedDB数据库，当前版本:', db.version);
+            
+            // 确保数据库不会在使用过程中被意外关闭
+            db.addEventListener('close', () => {
+              console.warn('IndexedDB数据库连接已关闭');
+            });
+            
+            resolve(db);
+          };
+          
+          request.onerror = function(event) {
+            const error = event.target.error;
+            console.error('打开IndexedDB失败:', error.name, error.message);
+            
+            // 针对常见错误类型提供更具体的错误信息
+            let errorMessage = '无法打开数据库';
+            if (error.name === 'QuotaExceededError') {
+              errorMessage = '存储空间不足，请清理浏览器缓存';
+            } else if (error.name === 'SecurityError') {
+              errorMessage = '安全限制阻止访问数据库';
+            }
+            
+            reject(new Error(errorMessage + ': ' + (error.message || error.name)));
+          };
+          
+          request.onblocked = function() {
+            console.warn('数据库操作被阻塞，可能有其他标签页打开了同一数据库');
+            reject(new Error('数据库操作被阻塞，请关闭其他阅读标签页后重试'));
+          };
+        } catch (e) {
+          console.error('创建IndexedDB请求失败:', e);
+          reject(new Error('初始化数据库失败: ' + e.message));
+        }
       });
     }
     
@@ -5181,26 +5241,102 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
     
     // 从IndexedDB读取文件内容
     function loadFileFromIndexedDB(fileId) {
+      // 验证输入参数
+      if (!fileId || typeof fileId !== 'string') {
+        return Promise.reject(new Error('无效的文件ID'));
+      }
+      
+      console.log('尝试从IndexedDB加载文件:', fileId);
+      
       return openDB().then(db => {
         return new Promise((resolve, reject) => {
-          const transaction = db.transaction([STORE_NAME], 'readonly');
-          const store = transaction.objectStore(STORE_NAME);
-          
-          const request = store.get(fileId);
-          
-          request.onsuccess = function(event) {
-            if (event.target.result) {
-              resolve(event.target.result.content);
-            } else {
-              resolve(null); // 文件不存在
+          try {
+            // 检查数据库是否有效且未关闭
+            if (!db || db.closed) {
+              throw new Error('数据库连接无效或已关闭');
             }
-          };
-          
-          request.onerror = function(event) {
-            console.error('从IndexedDB加载文件失败:', event.target.error);
-            reject(event.target.error);
-          };
+            
+            // 检查存储对象是否存在
+            if (!db.objectStoreNames.contains(STORE_NAME)) {
+              console.warn(`存储对象 ${STORE_NAME} 不存在`);
+              resolve(null); // 文件不存在
+              return;
+            }
+            
+            // 创建事务并获取存储
+            const transaction = db.transaction([STORE_NAME], 'readonly');
+            const store = transaction.objectStore(STORE_NAME);
+            
+            // 监听事务完成和错误
+            transaction.oncomplete = function() {
+              console.log('事务完成');
+            };
+            
+            transaction.onerror = function(event) {
+              console.error('事务错误:', event.target.error);
+              reject(new Error('数据访问事务失败'));
+            };
+            
+            // 尝试获取文件
+            const request = store.get(fileId);
+            
+            request.onsuccess = function(event) {
+              if (event.target.result) {
+                const fileData = event.target.result;
+                console.log('成功从IndexedDB加载文件内容');
+                
+                // 验证文件内容是否完整
+                if (!fileData.content || (typeof fileData.content === 'object' && fileData.content.byteLength === 0)) {
+                  console.warn('缓存文件内容为空或无效');
+                  resolve(null); // 返回null以便上层可以处理
+                } else {
+                  resolve(fileData.content);
+                }
+              } else {
+                console.warn('文件不存在于IndexedDB中:', fileId);
+                resolve(null); // 文件不存在
+              }
+            };
+            
+            request.onerror = function(event) {
+              const error = event.target.error;
+              console.error('从IndexedDB加载文件失败:', error.name, error.message);
+              
+              // 提供更友好的错误信息
+              let errorMessage = '加载文件失败';
+              if (error.name === 'QuotaExceededError') {
+                errorMessage = '存储空间不足';
+              } else if (error.name === 'SecurityError') {
+                errorMessage = '安全限制阻止访问';
+              }
+              
+              reject(new Error(errorMessage + ': ' + (error.message || error.name)));
+            };
+          } catch (e) {
+            console.error('处理IndexedDB请求时发生异常:', e);
+            reject(new Error('数据处理错误: ' + e.message));
+          }
         });
+      }).catch(error => {
+        console.error('打开数据库失败:', error);
+        
+        // 当IndexedDB失败时，尝试从localStorage获取作为后备方案
+        console.log('尝试从localStorage作为后备方案加载文件');
+        try {
+          const localStorageKey = 'file_content_' + fileId;
+          const content = localStorage.getItem(localStorageKey);
+          
+          if (content) {
+            console.log('成功从localStorage获取后备数据');
+            return Promise.resolve(content);
+          }
+        } catch (localStorageError) {
+          console.error('访问localStorage失败:', localStorageError);
+        }
+        
+        // 后备方案也失败，返回null而不是直接拒绝，让上层逻辑可以继续处理
+        console.log('所有缓存方案均失败，返回null');
+        return Promise.resolve(null);
       });
     }
     
@@ -5498,76 +5634,99 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       
       try {
         // 先加载保存的进度和设置（即使文件内容不在缓存中也应该加载设置）
-        loadProgress(fileId);
+        try {
+          loadProgress(fileId);
+        } catch (progressError) {
+          console.error('加载进度设置失败:', progressError);
+          // 继续执行，不因进度加载失败而中断整个流程
+        }
         
         let fileContent = null;
+        let loadMethod = '';
         
         // 1. 先尝试从IndexedDB加载文件内容
         try {
           fileContent = await loadFileFromIndexedDB(fileId);
           if (fileContent) {
             console.log('从IndexedDB成功加载文件内容');
+            loadMethod = 'IndexedDB';
           }
         } catch (e) {
-          console.warn('从IndexedDB加载文件失败:', e);
+          console.error('从IndexedDB加载文件失败:', e);
+          // 添加更详细的错误信息
+          showToast('IndexedDB读取失败: ' + (e.name || '未知错误'), 'error');
         }
         
         // 2. 如果IndexedDB没有，再尝试从localStorage加载作为后备
         if (!fileContent) {
           try {
-            fileContent = localStorage.getItem('reader_file_content_' + fileId);
-            if (fileContent) {
-              console.log('从localStorage成功加载文件内容');
+            // 检查localStorage是否可用
+            if (typeof localStorage !== 'undefined') {
+              fileContent = localStorage.getItem('reader_file_content_' + fileId);
+              if (fileContent) {
+                console.log('从localStorage成功加载文件内容');
+                loadMethod = 'localStorage';
+              }
+            } else {
+              console.warn('localStorage不可用');
             }
           } catch (e) {
-            console.warn('从localStorage加载文件失败:', e);
+            console.error('从localStorage加载文件失败:', e);
+            showToast('localStorage读取失败: ' + (e.name || '未知错误'), 'error');
           }
         }
         
         if (fileContent) {
-          // 解析文件内容
-          volData = parseText(fileContent);
-          
-          // 扁平化章节数据
-          flatChapters = flatten(volData);
-          
-          // 隐藏书籍页，显示阅读器
-          document.getElementById('booksPage').style.display = 'none';
-          appContainer.style.display = 'flex';
-          
-          // 强制应用当前的渲染变量
-          updateLocalRenderVariables();
-          applyCurrentFontSettings();
-          
-          // 初始化界面
-          renderDirectory();
-          renderChapter();
-          renderFunctionContent();
-          updateProgress();
-          updateChapterJumpUI();
-          showBookTitle(fileName);
-          
-          // 显示加载成功提示
-          showToast('成功加载缓存文件：' + fileName, 'success');
-          
-          // 重新初始化UI元素
-          setTimeout(() => {
-            initializeUIElements();
-            chapterContent = enhanceAutoPaging();
-            // 再次确保应用字体设置
+          try {
+            // 解析文件内容
+            volData = parseText(fileContent);
+            
+            // 扁平化章节数据
+            flatChapters = flatten(volData);
+            
+            // 隐藏书籍页，显示阅读器
+            document.getElementById('booksPage').style.display = 'none';
+            appContainer.style.display = 'flex';
+            
+            // 强制应用当前的渲染变量
+            updateLocalRenderVariables();
             applyCurrentFontSettings();
-          }, 100);
-          
-          return;
+            
+            // 初始化界面
+            resetDirectoryLoading(); // 重置目录加载状态
+            renderDirectory();
+            renderChapter();
+            renderFunctionContent();
+            updateProgress();
+            updateChapterJumpUI();
+            showBookTitle(fileName);
+            
+            // 显示加载成功提示，包含加载方式
+            showToast('成功加载缓存文件(' + loadMethod + ')：' + fileName, 'success');
+            
+            // 重新初始化UI元素
+            setTimeout(() => {
+              initializeUIElements();
+              chapterContent = enhanceAutoPaging();
+              // 再次确保应用字体设置
+              applyCurrentFontSettings();
+            }, 100);
+            
+            return;
+          } catch (parseError) {
+            console.error('解析文件内容失败:', parseError);
+            showToast('文件内容解析失败，可能已损坏', 'error');
+          }
         } else {
           console.log('缓存中没有找到文件内容，可能是缓存已清除或尚未缓存');
         }
       } catch (e) {
         console.error('从缓存加载文件内容失败:', e);
+        showToast('加载缓存文件时发生错误: ' + e.message, 'error');
       }
       
       // 如果缓存的文件内容不可用，提示用户重新选择文件，但保留已加载的设置
-      showToast('文件内容不在缓存中，请重新选择文件：' + fileName, 'warning');
+      showToast('无法打开缓存文件，文件内容可能已损坏或丢失，请重新选择原文件', 'warning');
       
       // 重置全局变量
       volData = [];
@@ -5578,9 +5737,19 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       document.getElementById('booksPage').style.display = 'none';
       
       // 打开文件选择对话框
-      const fileInput = document.getElementById('fileInput');
-      fileInput.value = '';
-      fileInput.click();
+      try {
+        const fileInput = document.getElementById('fileInput');
+        if (fileInput) {
+          fileInput.value = '';
+          fileInput.click();
+        } else {
+          console.warn('文件选择框元素未找到');
+          alert('请手动选择文件以继续阅读');
+        }
+      } catch (inputError) {
+        console.error('打开文件选择框失败:', inputError);
+        alert('无法打开文件选择框，请手动打开文件');
+      }
     }
     
     // 加载书籍页面内容
@@ -6137,6 +6306,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
             document.getElementById('booksPage').style.display = 'none';
             
             // 初始化和渲染
+            resetDirectoryLoading(); // 重置目录加载状态
             renderDirectory();
             renderChapter();
             renderFunctionContent();
@@ -6168,11 +6338,11 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       '亿': 100000000
     };
 
-    // 文本解析 - 增强版（支持章节重复适配、ANSI编码适配和前言章节适配）
+    // 文本解析 - 融合V0.3.11版本灵活识别优势
     function parseText(text) {
-      // 改进正则表达式，避免过度分割文本内容
-      // 只使用明确的分隔符，不使用空白字符作为分隔符，以保持内容完整性
-      const rawParts = text.split(/[-]{12,}|[=]{12,}|[*]{12,}|[—]{12,}|[_]{12,}/).map(p => p.trim()).filter(p => p.length > 0);
+      // 采用更灵活的分隔符，参考V0.3.11版本的实现
+      // 使用多种分隔符组合，包括空行和分隔线，提高目录识别准确性
+      const rawParts = text.split(/\n\n|\n[-]{3,}\n|\n[=]{3,}\n|\n[*]{3,}\n|\n[—]{3,}\n|\n[_]{3,}\n|[-]{12,}|[=]{12,}|[*]{12,}|[—]{12,}|[_]{12,}/).map(p => p.trim()).filter(p => p.length > 0);
       let vols = [];
       let currentVol = null;
       
@@ -6182,43 +6352,43 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       let prefaceContent = [];
       let hasFoundFirstChapter = false;
 
-      // 定义卷和章的正则表达式模式 - 增强版，支持更多格式
+      // 定义卷和章的正则表达式模式 - 融合V0.3.11的灵活性
       const volPatterns = [
-        /^[第]([零一二三四五六七八九十百千万亿]+)[卷集]/,
-        /^([一二三四五六七八九十百千万亿]+)[卷集]/,
-        /^[卷集]([一二三四五六七八九十百千万亿]+)/,
-        /^[卷集]([0-9]+)/,
-        /^[第]([0-9]+)[卷集]/,
-        /^第[ ]*([0-9]+)[ ]*卷/,
-        /^第[ ]*([0-9]+)[ ]*集/,
+        /[第]([零一二三四五六七八九十百千万亿]+)[卷集]/,
+        /([一二三四五六七八九十百千万亿]+)[卷集]/,
+        /[卷集]([一二三四五六七八九十百千万亿]+)/,
+        /[卷集]([0-9]+)/,
+        /[第]([0-9]+)[卷集]/,
+        /第[ ]*([0-9]+)[ ]*卷/,
+        /第[ ]*([0-9]+)[ ]*集/,
       ];
       
+      // 移除严格的行首限制，增加更多章节标题模式，参考V0.3.11版本
       const chapterPatterns = [
-        // 移除行首限制，允许在任何位置匹配，同时保持模式的准确性
+        // 移除行首限制，增加更多格式支持
+        /[第]\s*([零一二三四五六七八九十百千万亿两]+)\s*[章节回][\s：:。]/,
+        /[第]\s*([0-9]+)\s*[章节回][\s：:。]/,
+        /第[ ]*([0-9]+)[ ]*章[\s：:。]/,
+        /第[ ]*([0-9]+)[ ]*节[\s：:。]/,
+        /第[ ]*([0-9]+)[ ]*回[\s：:。]/,
+        // 阿拉伯数字+回/章格式，不要求严格行首
+        /([0-9]+)[章回][\s：:。]/,
+        // 符号格式，不要求严格行首
+        /【([0-9]+)】[\s：:。]/,
+        /【([一二三四五六七八九十百千万亿两]+)】[\s：:。]/,
+        /「([0-9]+)」[\s：:。]/,
+        /「([一二三四五六七八九十百千万亿两]+)」[\s：:。]/,
+        /（([0-9]+)）[\s：:。]/,
+        /（([一二三四五六七八九十百千万亿两]+)）[\s：:。]/,
+        /\[([0-9]+)\][\s：:。]/,
+        /\[([一二三四五六七八九十百千万亿两]+)\][\s：:。]/,
+        /\{([0-9]+)\}[\s：:。]/,
+        /\{([一二三四五六七八九十百千万亿两]+)\}[\s：:。]/,
+        // 增加更多常见章节格式
         /[第]\s*([零一二三四五六七八九十百千万亿两]+)\s*[章节回]/,
-        /([一二三四五六七八九十百千万亿两]+)[章节回]/,
-        /[章节回]([一二三四五六七八九十百千万亿两]+)/,
-        /[章节回]([0-9]+)/,
         /[第]\s*([0-9]+)\s*[章节回]/,
-        /第[ ]*([0-9]+)[ ]*章/,
-        /第[ ]*([0-9]+)[ ]*节/,
-        /第[ ]*([0-9]+)[ ]*回/,
-        /第[ ]*([0-9]+)[ ]*/,
-        /[章节回]\s*[0-9]+\s*./,
-        /[章节回]\s*[一二三四五六七八九十百千万亿两]+\s*./,
-        // 阿拉伯数字+回/章格式
-        /([0-9]+)[章回]/,
-        // 符号格式
-        /【([0-9]+)】/,
-        /【([一二三四五六七八九十百千万亿两]+)】/,
-        /「([0-9]+)」/,
-        /「([一二三四五六七八九十百千万亿两]+)」/,
-        /（([0-9]+)）/,
-        /（([一二三四五六七八九十百千万亿两]+)）/,
-        /\[([0-9]+)\]/,
-        /\[([一二三四五六七八九十百千万亿两]+)\]/,
-        /\{([0-9]+)\}/,
-        /\{([一二三四五六七八九十百千万亿两]+)\}/
+        /^[第]\s*([零一二三四五六七八九十百千万亿两]+)\s*[章节回]/,
+        /^[第]\s*([0-9]+)\s*[章节回]/
       ];
 
       // 初始化默认卷
@@ -6246,20 +6416,23 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
             let isVolTitle = false;
             let isChapterTitle = false;
             
-            // 检查是否是卷标题 (支持多种格式)
+              // 检查是否是卷标题 (支持多种格式)
             if (trimmedLine) { // 只有非空行才可能是卷标题
-              for (const pattern of volPatterns) {
-                if (pattern.test(trimmedLine)) {
-                  isVolTitle = true;
-                  break;
+              // 更宽松的匹配策略，提高卷识别率
+              if (trimmedLine.length < 50) { // 卷标题通常不会太长
+                for (const pattern of volPatterns) {
+                  if (pattern.test(trimmedLine)) {
+                    isVolTitle = true;
+                    break;
+                  }
                 }
               }
             }
             
             // 检查是否是章节标题 (支持多种格式)
             if (trimmedLine && !isVolTitle) { // 只有非空行且不是卷标题才可能是章节标题
-              // 添加字数限制检查：章节标题不超过20个字符
-              if (trimmedLine.length <= 20) {
+              // 更宽松的章节标题匹配，增加标题长度检查提高准确性
+              if (trimmedLine.length < 100) { // 章节标题通常不会太长
                 for (const pattern of chapterPatterns) {
                   if (pattern.test(trimmedLine)) {
                     isChapterTitle = true;
@@ -6268,6 +6441,8 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
                 }
               }
             }
+            
+            // 使用外部定义的extractFullChapterTitle函数
             
             // 处理卷标题
             if (isVolTitle) {
@@ -6320,9 +6495,12 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
                 }
               }
               
-              // 创建新章节
+              // 创建新章节，直接使用原始的完整行作为标题
+              // 不使用extractFullChapterTitle函数，避免标题被截断或修改
               currentChapter = { title: trimmedLine, content: '' };
               currentChapterContent = [];
+              // 确保内容数组被重置，避免内容交叉污染
+              currentChapterContent.length = 0;
             }
             // 处理正文内容 - 保留原始行（包括空行）
             else {
@@ -6398,45 +6576,31 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       return vols;
     }
 
-    // 从内容中提取章节标题 - 增强版
+    // 提取完整章节标题的辅助函数 - 移到外部，避免重复定义
+    function extractFullChapterTitle(line, patterns) {
+      for (const pattern of patterns) {
+        const match = line.match(pattern);
+        if (match) {
+          // 返回完整的匹配部分，而不仅仅是捕获组
+          return match[0];
+        }
+      }
+      return null;
+    }
+
+    // 从内容中提取章节标题 - 简化版
     function extractChapterTitleFromContent(lines) {
-      // 精简化章节标题模式，移除行首限制以匹配行中任何位置
-      const patterns = [
-        /[第]([零一二三四五六七八九十百千万亿两]+)[章节回].*/,
-        /[第]([0-9]+)[章节回].*/,
-        /第[ ]*([0-9]+)[ ]*章/,
-        /第[ ]*([0-9]+)[ ]*节/,
-        /第[ ]*([0-9]+)[ ]*回/,
-        /第[ ]*([0-9]+)[ ]*/,
-        /[\s]*[第]([零一二三四五六七八九十百千万亿两0-9]+)[章节回][\s]*/,
-        // 阿拉伯数字+回/章格式
-        /([0-9]+)[章回].*/,
-        // 符号格式
-        /【([0-9]+)】.*/,
-        /【([一二三四五六七八九十百千万亿两]+)】.*/,
-        /「([0-9]+)」.*/,
-        /「([一二三四五六七八九十百千万亿两]+)」.*/,
-        /（([0-9]+)）.*/,
-        /（([一二三四五六七八九十百千万亿两]+)）.*/,
-        /\[([0-9]+)\].*/,
-        /\[([一二三四五六七八九十百千万亿两]+)\].*/,
-        /\{([0-9]+)\}.*/,
-        /\{([一二三四五六七八九十百千万亿两]+)\}.*/
-      ];
-      
       // 检查前3行，避免过多匹配
       for (let i = 0; i < Math.min(lines.length, 3); i++) {
         const line = lines[i];
-        // 添加字数限制检查：章节标题不超过50个字符
-        if (line.length <= 50) {
-          for (const pattern of patterns) {
-            if (pattern.test(line)) {
-              return line;
-            }
+        // 直接检查是否匹配章节模式，不使用extractFullChapterTitle函数
+        // 避免修改原始标题
+        for (const pattern of chapterPatterns) {
+          if (pattern.test(line)) {
+            return line;
           }
         }
       }
-      
       return null;
     }
 
@@ -6702,13 +6866,24 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       renderFunctionContent();
     }
 
-    // 性能优化：目录渲染
+    // 目录加载相关全局变量 - 已简化为一次性加载
+    
+    // 重置目录加载状态
+    function resetDirectoryLoading() {
+      // 重置目录加载状态
+      console.log('重置目录加载状态');
+      // 可以在这里添加目录加载相关的重置逻辑
+      // 例如：设置加载状态标志、清理加载指示器等
+    }
+    
+    // 目录渲染 - 恢复为一次性加载所有章节
     function renderDirectory() {
       // 使用 DocumentFragment 优化DOM操作
       const fragment = document.createDocumentFragment();
       
+      // 遍历卷
       volData.forEach((vol, volIndex) => {
-        // 卷标题
+        // 创建卷标题
         const volumeTitle = document.createElement('div');
         volumeTitle.className = 'volume-title';
         volumeTitle.textContent = vol.volTitle;
@@ -6780,6 +6955,8 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       // 初始化目录滚动检测和按钮事件
       setupBackToCurrentButtonLogic();
     }
+    
+    // 移除加载更多章节相关函数
     
     // 确保回到当前章节按钮存在
     function ensureBackToCurrentButton() {
@@ -7204,8 +7381,14 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
             const highlightType = window.renderVariables.dialogHighlightType || 'background';
             const prefix = window.renderVariables.dialogPrefix || '“';
             const suffix = window.renderVariables.dialogSuffix || '”';
+            // 检查是否启用字体高亮
+            const isFontHighlightEnabled = window.renderVariables.isDialogFontHighlightEnabled || false;
             text = text.replace(window.dialogRegex, function(match, content) {
-              return prefix + '<span class="highlight-dialog ' + highlightType + '">' + escapeHTML(content) + '</span>' + suffix;
+              // 只在下划线模式下且启用字体高亮时添加font-highlight类
+              const classes = highlightType === 'underline' && isFontHighlightEnabled 
+                ? 'highlight-dialog ' + highlightType + ' font-highlight' 
+                : 'highlight-dialog ' + highlightType;
+              return prefix + '<span class="' + classes + '">' + escapeHTML(content) + '</span>' + suffix;
             });
           } catch (e) {
             console.error('对话高亮处理出错:', e);
@@ -9066,17 +9249,17 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
             type: 'secondary'
           },
           {
-            text: '导入',
+            text: '导入粘贴板人名数据',
             type: 'secondary',
             onClick: function() {
-              importNameGroups();
+              importNameGroupsFromClipboard();
             }
           },
           {
-            text: '导出',
+            text: '复制人名数据',
             type: 'secondary',
             onClick: function() {
-              exportNameGroups();
+              copyNameGroups();
             }
           },
           {
@@ -9928,6 +10111,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       // 确保使用window.renderVariables中的设置
       const dialogHighlightColor = window.renderVariables.dialogHighlightColor || 'yellow';
       const dialogHighlightType = window.renderVariables.dialogHighlightType || 'background';
+      const isDialogFontHighlightEnabled = window.renderVariables.isDialogFontHighlightEnabled || false;
       const dialogPrefix = window.renderVariables.dialogPrefix || '“';
       const dialogSuffix = window.renderVariables.dialogSuffix || '”';
       
@@ -9964,11 +10148,16 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
                 灰色
               </button>
               <div style="display: flex; align-items: center; gap: 10px; margin-top: 10px; width: 100%;">
-                <label style="margin: 0;">自定义颜色:</label>
-                <input type="color" id="customDialogColor" value="#fff1c2" style="width: 50px; height: 35px; border: none; cursor: pointer;">
-                <button id="applyCustomColor" class="color-option" onclick="setCustomDialogColor()">
-                  应用自定义颜色
-                </button>
+                <label style="margin: 0;">当前颜色:</label>
+                <input type="color" id="customDialogColor" value="#fff1c2" style="width: 50px; height: 35px; border: none; cursor: pointer;" onchange="setCustomDialogColor()">
+              </div>
+              
+              <!-- 字体高亮开关，仅当下划线样式时显示 -->
+              <div id="fontHighlightControl" style="margin-top: 20px; display: ${dialogHighlightType === 'underline' ? 'block' : 'none'};">
+                <label style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                  <input type="checkbox" id="dialogFontHighlightToggle" ${isDialogFontHighlightEnabled ? 'checked' : ''} onclick="toggleDialogFontHighlight()">
+                  启用字体高亮
+                </label>
               </div>
               
               <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 20px; width: 100%;">
@@ -10040,26 +10229,27 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       
       const customColor = customColorInput.value;
       
-      // 移除所有预设颜色的活动状态
-      const presetOptions = document.querySelectorAll('.color-option[data-color]');
-      presetOptions.forEach(option => option.classList.remove('active'));
+      // 移除所有预设颜色的活动状态并标记自定义颜色为活动状态
+      const colorOptions = document.querySelectorAll('.color-option');
+      colorOptions.forEach(option => {
+        option.classList.remove('active');
+        // 为了标识自定义颜色状态，可以给第一个按钮添加custom-active类
+        if (option === colorOptions[0]) {
+          option.classList.add('custom-active');
+        }
+      });
       
-      // 更新预览
+      // 应用颜色到CSS变量
       document.documentElement.style.setProperty('--dialog-highlight-color', customColor);
       
-      // 为自定义颜色按钮添加临时的活动状态标识
-      const customButton = document.getElementById('applyCustomColor');
-      if (customButton) {
-        // 移除所有其他按钮的自定义活动状态
-        document.querySelectorAll('.color-option').forEach(btn => {
-          btn.classList.remove('custom-active');
-        });
-        // 添加自定义活动状态
-        customButton.classList.add('custom-active');
-      }
-      
-      // 更新全局渲染变量，以便下次打开对话框时显示当前选择的颜色
+      // 更新全局渲染变量，确保使用实际的十六进制颜色值
       window.renderVariables.dialogHighlightColor = customColor;
+      
+      // 保存到localStorage，使用一致的键名
+      localStorage.setItem('readerDialogHighlightColor', customColor);
+      
+      // 更新预览
+      updateDialogPreview();
     }
 
     // 关闭对话高亮设置对话框
@@ -10084,6 +10274,12 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         window.dialogHighlightType = {};
       }
       window.dialogHighlightType.current = selectedType;
+      
+      // 控制字体高亮开关的显示
+      const fontHighlightControl = document.getElementById('fontHighlightControl');
+      if (fontHighlightControl) {
+        fontHighlightControl.style.display = selectedType === 'underline' ? 'block' : 'none';
+      }
       
       // 更新预览
       updateDialogPreview();
@@ -10138,10 +10334,20 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       
       // 更新预览样式
       previewDialog.className = `highlight-dialog ${highlightType}`;
+      
+      // 更新背景/下划线高亮颜色
       if (isCustomColor) {
         document.documentElement.style.setProperty('--dialog-highlight-color', selectedColor);
       } else {
         document.documentElement.style.setProperty('--dialog-highlight-color', `var(--dialog-highlight-${selectedColor})`);
+      }
+      
+      // 检查是否启用字体高亮（仅下划线模式下有效）
+      const isFontHighlightEnabled = window.renderVariables.isDialogFontHighlightEnabled || false;
+      if (highlightType === 'underline' && isFontHighlightEnabled) {
+        previewDialog.classList.add('font-highlight');
+      } else {
+        previewDialog.classList.remove('font-highlight');
       }
       
       // 同步更新全局渲染变量，确保实时预览和最终应用一致
@@ -10152,30 +10358,59 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
     function setDialogColorOption(element) {
       // 移除所有活动状态
       const allOptions = document.querySelectorAll('.color-option');
-      allOptions.forEach(option => option.classList.remove('active'));
+      allOptions.forEach(option => {
+        option.classList.remove('active');
+        option.classList.remove('custom-active');
+      });
       
       // 设置当前活动状态
       element.classList.add('active');
       
+      // 获取当前颜色并应用到CSS变量
+      const currentColor = getComputedStyle(element).backgroundColor;
+      document.documentElement.style.setProperty('--dialog-highlight-color', currentColor);
+      
+      // 更新当前颜色输入框的值（需要将RGB转换为十六进制）
+      const rgbMatch = currentColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+      let hexColor = '#fff1c2'; // 默认颜色
+      if (rgbMatch) {
+        hexColor = '#' + [rgbMatch[1], rgbMatch[2], rgbMatch[3]]
+          .map(x => parseInt(x).toString(16).padStart(2, '0'))
+          .join('');
+        const customColorInput = document.getElementById('customDialogColor');
+        if (customColorInput) {
+          customColorInput.value = hexColor;
+        }
+      }
+      
       // 更新预览
       updateDialogPreview();
       
-      // 更新全局渲染变量，以便下次打开对话框时显示当前选择的颜色
-      window.renderVariables.dialogHighlightColor = element.dataset.color;
+      // 更新全局渲染变量和localStorage，使用实际的十六进制颜色值确保一致性
+      window.renderVariables.dialogHighlightColor = hexColor;
+      localStorage.setItem('readerDialogHighlightColor', hexColor);
+    }
+    
+    // 设置字体高亮颜色选项
+    // 切换字体高亮功能
+    function toggleDialogFontHighlight() {
+      const isEnabled = document.getElementById('dialogFontHighlightToggle').checked;
+      window.renderVariables.isDialogFontHighlightEnabled = isEnabled;
+      updateDialogPreview();
     }
 
     // 应用对话高亮设置
     function applyDialogHighlight() {
       // 获取当前选择的颜色
       const colorOptions = document.querySelectorAll('.color-option');
-      let selectedColor = 'yellow';
+      let selectedColor = '#fff1c2'; // 默认使用十六进制颜色值
       let isCustomColor = false;
       
       // 检查是否选择了自定义颜色
       for (const option of colorOptions) {
         if (option.classList.contains('custom-active')) {
           const customColorInput = document.getElementById('customDialogColor');
-          selectedColor = customColorInput ? customColorInput.value : 'yellow';
+          selectedColor = customColorInput ? customColorInput.value : '#fff1c2';
           isCustomColor = true;
           break;
         }
@@ -10184,8 +10419,15 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       // 如果没有选择自定义颜色，检查预设颜色
       if (!isCustomColor) {
         for (const option of colorOptions) {
-          if (option.classList.contains('active') && option.dataset.color) {
-            selectedColor = option.dataset.color;
+          if (option.classList.contains('active')) {
+            // 如果是预设颜色，获取其实际颜色值而不是名称
+            const currentColor = getComputedStyle(option).backgroundColor;
+            const rgbMatch = currentColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+            if (rgbMatch) {
+              selectedColor = '#' + [rgbMatch[1], rgbMatch[2], rgbMatch[3]]
+                .map(x => parseInt(x).toString(16).padStart(2, '0'))
+                .join('');
+            }
             break;
           }
         }
@@ -10234,6 +10476,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       localStorage.setItem('readerDialogHighlightColor', selectedColor);
       localStorage.setItem('readerDialogHighlightType', highlightType);
       localStorage.setItem('readerDialogHighlightEnabled', window.renderVariables.isDialogHighlightEnabled.toString());
+      localStorage.setItem('readerDialogFontHighlightEnabled', window.renderVariables.isDialogFontHighlightEnabled.toString());
       localStorage.setItem('readerDialogPrefix', dialogPrefix);
       localStorage.setItem('readerDialogSuffix', dialogSuffix);
       
@@ -10591,8 +10834,8 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       }
     }
     
-    // 导出人名分组配置
-    function exportNameGroups() {
+    // 复制人名分组数据到剪贴板
+    function copyNameGroups() {
       try {
         // 准备导出数据
         const exportData = {
@@ -10604,121 +10847,248 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         // 转换为JSON字符串并格式化
         const jsonString = JSON.stringify(exportData, null, 2);
         
-        // 创建Blob对象
-        const blob = new Blob([jsonString], { type: 'application/json' });
-        
-        // 创建下载链接
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        
-        // 设置文件名，以书籍文件名为主要名称，加上时间戳防止覆盖
-        const timestamp = new Date().toLocaleString('zh-CN', {
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit'
-        }).replace(/[/:\s]/g, '-');
-        
-        // 移除文件名中的.txt后缀
-        let displayName = currentFileName;
-        if (displayName.toLowerCase().endsWith('.txt')) {
-          displayName = displayName.substring(0, displayName.length - 4);
+        // 使用Clipboard API复制到剪贴板
+        if (navigator.clipboard && window.isSecureContext) {
+          // 现代浏览器安全上下文下的复制
+          navigator.clipboard.writeText(jsonString).then(() => {
+            showToast('人名数据已复制到剪贴板', 'success');
+          }).catch(err => {
+            console.error('复制失败:', err);
+            // 降级到传统方法
+            fallbackCopyTextToClipboard(jsonString);
+          });
+        } else {
+          // 降级到传统方法
+          fallbackCopyTextToClipboard(jsonString);
         }
-        
-        a.download = `${displayName}_人名高亮配置_${timestamp}.json`;
-        
-        // 触发下载
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        
-        // 释放URL对象
-        URL.revokeObjectURL(url);
-        
-        showToast('人名高亮配置导出成功', 'success');
       } catch (error) {
-        console.error('导出人名配置失败:', error);
-        showToast('导出失败，请重试', 'error');
+        console.error('复制人名配置失败:', error);
+        showToast('复制失败，请重试', 'error');
       }
     }
     
-    // 导入人名分组配置
-    function importNameGroups() {
-      // 创建隐藏的文件输入元素
-      const fileInput = document.createElement('input');
-      fileInput.type = 'file';
-      fileInput.accept = '.json';
-      fileInput.style.display = 'none';
+    // 降级复制方法
+    function fallbackCopyTextToClipboard(text) {
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
       
-      // 添加文件选择事件监听
-      fileInput.addEventListener('change', function(event) {
-        const file = event.target.files[0];
-        if (!file) return;
-        
-        const reader = new FileReader();
-        reader.onload = function(e) {
-          // 确保renderVariables存在
-          if (!window.renderVariables) {
-            window.renderVariables = {};
-          }
-          if (!window.renderVariables.nameGroups || typeof window.renderVariables.nameGroups !== 'object') {
-            window.renderVariables.nameGroups = {
-              group1: { color: '#1976d2', names: [] },
-              group2: { color: '#388e3c', names: [] }
-            };
-          }
-          
-          try {
-            // 解析JSON内容
-            const importData = JSON.parse(e.target.result);
-            
-            // 验证数据格式
-            if (!importData.nameGroups || typeof importData.nameGroups !== 'object') {
-              throw new Error('无效的配置文件格式');
-            }
-            
-            // 备份当前配置，防止导入失败
-            const backup = JSON.parse(JSON.stringify(window.renderVariables.nameGroups));
-            
-            // 更新renderVariables中的nameGroups
-            window.renderVariables.nameGroups = importData.nameGroups;
-            
-            // 确保nameGroups是有效的对象结构
-            if (Array.isArray(window.renderVariables.nameGroups)) {
-              // 处理旧版数组格式
-              const newNameGroups = {};
-              importData.nameGroups.forEach((group, index) => {
-                const groupId = `group${index + 1}`;
-                newNameGroups[groupId] = group;
-              });
-              window.renderVariables.nameGroups = newNameGroups;
-            }
-            
-            // 重新初始化对话框，应用导入的配置
-            closeNameDialog();
-            openNameDialog();
-            
-            showToast('人名高亮配置导入成功', 'success');
-          } catch (error) {
-            console.error('导入人名配置失败:', error);
-            showToast('导入失败，请检查文件格式是否正确', 'error');
-          }
+      // 防止滚动到元素位置
+      textArea.style.top = '0';
+      textArea.style.left = '0';
+      textArea.style.position = 'fixed';
+      textArea.style.opacity = '0';
+      
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      
+      try {
+        const successful = document.execCommand('copy');
+        if (successful) {
+          showToast('人名数据已复制到剪贴板', 'success');
+        } else {
+          showToast('复制失败，请手动复制', 'error');
+        }
+      } catch (err) {
+        console.error('传统复制方法失败:', err);
+        showToast('复制失败，请重试', 'error');
+      } finally {
+        document.body.removeChild(textArea);
+      }
+    }
+    
+    // 从剪贴板导入人名分组数据
+    function importNameGroupsFromClipboard() {
+      // 确保renderVariables存在
+      if (!window.renderVariables) {
+        window.renderVariables = {};
+      }
+      if (!window.renderVariables.nameGroups || typeof window.renderVariables.nameGroups !== 'object') {
+        window.renderVariables.nameGroups = {
+          group1: { color: '#1976d2', names: [] },
+          group2: { color: '#388e3c', names: [] }
         };
+      }
+      
+      // 使用Clipboard API从剪贴板读取数据
+      if (navigator.clipboard && window.isSecureContext) {
+        // 现代浏览器安全上下文下的读取
+        navigator.clipboard.readText().then(text => {
+          processClipboardText(text);
+        }).catch(err => {
+          console.error('从剪贴板读取失败:', err);
+          // 降级到传统方法
+          showToast('无法访问剪贴板，请手动粘贴', 'error');
+          showPasteDialog();
+        });
+      } else {
+        // 降级到手动粘贴对话框
+        showPasteDialog();
+      }
+    }
+    
+    // 处理剪贴板文本
+    function processClipboardText(text) {
+      if (!text || text.trim() === '') {
+        showToast('剪贴板为空，请先复制人名数据', 'error');
+        return;
+      }
+      
+      try {
+        // 解析JSON内容
+        const importData = JSON.parse(text);
         
-        reader.onerror = function() {
-          showToast('文件读取失败', 'error');
-        };
+        // 验证数据格式
+        if (!importData.nameGroups || typeof importData.nameGroups !== 'object') {
+          throw new Error('无效的人名数据格式');
+        }
         
-        // 读取文件
-        reader.readAsText(file);
+        // 备份当前配置，防止导入失败
+        const backup = JSON.parse(JSON.stringify(window.renderVariables.nameGroups));
+        
+        // 更新renderVariables中的nameGroups
+        window.renderVariables.nameGroups = importData.nameGroups;
+        
+        // 确保nameGroups是有效的对象结构
+        if (Array.isArray(window.renderVariables.nameGroups)) {
+          // 处理数组格式
+          const newNameGroups = {};
+          importData.nameGroups.forEach((group, index) => {
+            const groupId = `group${index + 1}`;
+            newNameGroups[groupId] = group;
+          });
+          window.renderVariables.nameGroups = newNameGroups;
+        }
+        
+        // 重新初始化当前人名列表和颜色映射
+        rebuildCurrentNamesAndColorMap();
+        
+        // 重新初始化对话框，应用导入的配置
+        closeNameDialog();
+        openNameDialog();
+        
+        // 强制重新渲染章节以应用人名高亮
+        window.forceRerender = true;
+        renderChapter();
+        
+        // 更新功能面板
+        renderFunctionContent();
+        
+        // 保存配置到localStorage
+        if (currentFileId) {
+          saveProgress();
+        }
+        
+        showToast('已从剪贴板导入人名数据', 'success');
+      } catch (error) {
+        console.error('解析人名数据失败:', error);
+        showToast('导入失败，请检查剪贴板内容格式是否正确', 'error');
+        // 显示手动粘贴对话框
+        showPasteDialog();
+      }
+    }
+    
+    // 显示手动粘贴对话框
+    function showPasteDialog() {
+      // 创建对话框HTML
+      const dialogHTML = `
+        <div id="pasteDialog" class="dialog-overlay" style="
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.5);
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          z-index: 10000;
+          font-family: inherit;
+        ">
+          <div style="
+            background: var(--background-color);
+            border-radius: 8px;
+            padding: 20px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+          ">
+            <h3 style="margin-bottom: 15px; color: var(--text-color);">手动粘贴人名数据</h3>
+            <textarea id="pasteTextarea" style="
+              width: 100%;
+              min-height: 200px;
+              padding: 10px;
+              border: 1px solid var(--border-color);
+              border-radius: 4px;
+              background: var(--paper-color);
+              color: var(--text-color);
+              font-family: inherit;
+              font-size: 14px;
+              resize: vertical;
+            " placeholder="请粘贴人名数据JSON..."></textarea>
+            <div style="margin-top: 15px; display: flex; justify-content: flex-end; gap: 10px;">
+              <button onclick="document.getElementById('pasteDialog').remove();" style="
+                padding: 8px 16px;
+                background: var(--paper-color);
+                color: var(--text-color);
+                border: 1px solid var(--border-color);
+                border-radius: 4px;
+                cursor: pointer;
+                font-family: inherit;
+              ">取消</button>
+              <button onclick="processPastedText();" style="
+                padding: 8px 16px;
+                background: var(--accent-color);
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-family: inherit;
+              ">确定</button>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      // 添加到body
+      document.body.insertAdjacentHTML('beforeend', dialogHTML);
+    }
+    
+    // 处理手动粘贴的文本
+    function processPastedText() {
+      const textarea = document.getElementById('pasteTextarea');
+      if (textarea) {
+        const text = textarea.value.trim();
+        processClipboardText(text);
+        // 移除对话框
+        const dialog = document.getElementById('pasteDialog');
+        if (dialog) {
+          dialog.remove();
+        }
+      }
+    }
+    
+    // 将processPastedText添加到window对象，使其可以在HTML中通过onclick直接调用
+    window.processPastedText = processPastedText;
+    
+    // 重建当前人名列表和颜色映射
+    function rebuildCurrentNamesAndColorMap() {
+      // 清空当前人名列表和颜色映射
+      window.renderVariables.currentNames = [];
+      window.renderVariables.globalNameColorMap = {};
+      
+      // 遍历所有分组，重建列表和映射
+      Object.keys(window.renderVariables.nameGroups).forEach(groupId => {
+        const group = window.renderVariables.nameGroups[groupId];
+        if (group.names && Array.isArray(group.names)) {
+          group.names.forEach(name => {
+            window.renderVariables.currentNames.push(name);
+            window.renderVariables.globalNameColorMap[name] = group.color;
+          });
+        }
       });
-      
-      // 触发文件选择对话框
-      document.body.appendChild(fileInput);
-      fileInput.click();
-      document.body.removeChild(fileInput);
     }
 
     // 生成人名分组标记（1A, 1B, 1C, 1D, 1E, 1F, 2A, 2B, ...）
@@ -19372,21 +19742,33 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
 
     // 更新对话高亮颜色
     function updateDialogHighlightColor() {
-      const dialogHighlightColor = window.renderVariables.dialogHighlightColor || 'yellow';
-      if (dialogHighlightColor.startsWith('#')) {
-        // 自定义颜色，直接使用
-        document.documentElement.style.setProperty('--dialog-highlight-color', dialogHighlightColor);
-      } else {
-        // 预设颜色，使用对应的CSS变量的具体值
-        const colorMap = {
-          'yellow': '#fff1c2',
-          'blue': '#d1e0ff',
-          'red': '#ffd1d1',
-          'gray': '#ffffff'
-        };
-        const colorValue = colorMap[dialogHighlightColor] || colorMap['yellow'];
-        document.documentElement.style.setProperty('--dialog-highlight-color', colorValue);
+      // 处理背景/下划线高亮颜色
+      // 优先使用window.renderVariables.dialogHighlightColor，如果为null或undefined，则使用默认的十六进制颜色值
+      let dialogHighlightColor = window.renderVariables.dialogHighlightColor;
+      
+      // 预设颜色映射表，用于兼容可能存在的旧格式颜色名称
+      const colorMap = {
+        'yellow': '#fff1c2',
+        'blue': '#d1e0ff',
+        'red': '#ffd1d1',
+        'gray': '#ffffff'
+      };
+      
+      // 如果颜色值不存在，使用默认黄色
+      if (!dialogHighlightColor) {
+        dialogHighlightColor = '#fff1c2';
       }
+      // 如果是预设颜色名称，转换为对应的十六进制值
+      else if (colorMap[dialogHighlightColor]) {
+        dialogHighlightColor = colorMap[dialogHighlightColor];
+      }
+      // 确保使用的是十六进制颜色值
+      else if (!dialogHighlightColor.startsWith('#')) {
+        dialogHighlightColor = '#fff1c2'; // 默认为黄色
+      }
+      
+      // 应用颜色到CSS变量
+      document.documentElement.style.setProperty('--dialog-highlight-color', dialogHighlightColor);
     }
 
     // 页面加载时初始化
@@ -19399,6 +19781,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       const savedIsDialogHighlightEnabled = localStorage.getItem('readerDialogHighlightEnabled');
       const savedDialogHighlightColor = localStorage.getItem('readerDialogHighlightColor');
       const savedDialogHighlightType = localStorage.getItem('readerDialogHighlightType');
+      const savedDialogFontHighlightEnabled = localStorage.getItem('readerDialogFontHighlightEnabled');
       const savedDialogPrefix = localStorage.getItem('readerDialogPrefix');
       const savedDialogSuffix = localStorage.getItem('readerDialogSuffix');
       
@@ -19411,6 +19794,12 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       }
       if (savedDialogHighlightType) {
         window.renderVariables.dialogHighlightType = savedDialogHighlightType;
+      }
+      if (savedDialogFontHighlightEnabled) {
+        window.renderVariables.isDialogFontHighlightEnabled = savedDialogFontHighlightEnabled === 'true';
+      } else {
+        // 默认关闭字体高亮
+        window.renderVariables.isDialogFontHighlightEnabled = false;
       }
       if (savedDialogPrefix) {
         window.renderVariables.dialogPrefix = savedDialogPrefix;
