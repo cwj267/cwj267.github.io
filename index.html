@@ -13,7 +13,7 @@
   <!-- 为Windows Mobile设备设置状态栏颜色 -->
   <meta name="msapplication-navbutton-color" content="#ffffff" />
   
-  <title>电子书阅读器V0.5.5</title>
+  <title>电子书阅读器V0.5.6</title>
   <script src="https://cdn.jsdelivr.net/npm/jschardet@3.0.0/dist/jschardet.min.js"></script>
   <script>
     // 全局变量定义
@@ -4111,9 +4111,89 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: 16px;
+      gap: 16px;
       margin-bottom: 30px;
       padding-bottom: 15px;
       border-bottom: 1px solid var(--border-color);
+    }
+    
+    .books-actions {
+      display: flex;
+      gap: 8px;
+    }
+    
+    .books-action-btn {
+      padding: 8px 16px;
+      background: var(--primary-color);
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      font-family: Inter;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    
+    .books-action-btn:hover {
+      background: var(--primary-hover-color);
+    }
+    
+    .books-search-container {
+      display: flex;
+      align-items: center;
+      margin-right: 16px;
+      min-width: 200px;
+      flex: 1;
+    }
+    
+    .book-search-input {
+      padding: 6px 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      font-size: 14px;
+      width: 100%;
+      min-width: 200px;
+      transition: all 0.3s ease;
+      color: var(--text-color);
+      background-color: var(--bg-color);
+    }
+    
+    .book-search-input:focus {
+      outline: none;
+      border-color: var(--primary-color);
+      box-shadow: 0 0 0 2px rgba(58, 123, 213, 0.1);
+    }
+    
+    .book-search-input::placeholder {
+      color: var(--text-muted);
+    }
+    
+    .books-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+    }
+    
+    @media (max-width: 768px) {
+      .books-controls {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+      }
+      .books-search-container {
+        margin-right: 0;
+        flex-shrink: 0;
+      }
+      .book-search-input {
+        width: 100%;
+        max-width: none;
+      }
+      .books-actions {
+        justify-content: center;
+      }
     }
 
     .books-title {
@@ -4128,12 +4208,15 @@
       align-items: center;
       padding: 20px;
       border-bottom: 1px solid var(--border-color);
+      flex-wrap: wrap;
+      gap: 10px;
     }
     
     .books-title {
       font-size: 24px;
       font-weight: bold;
       color: var(--text-color);
+      margin: 0;
     }
 
     .books-action-btn {
@@ -4184,8 +4267,8 @@
 
     .books-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 20px;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
       margin-bottom: 20px;
       overflow: visible;
     }
@@ -4194,12 +4277,12 @@
       border: 1px solid var(--border-color);
       border-radius: 12px;
       background: var(--sidebar-bg);
-      padding: 20px;
+      padding: 12px;
       cursor: pointer;
       transition: all 0.2s;
       display: flex;
       flex-direction: column;
-      min-height: 220px;
+      min-height: 160px;
       height: auto;
     }
 
@@ -4264,7 +4347,10 @@
   }
 
     .book-card-header {
-      display: flex;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
+      -webkit-box-orient: vertical;
       align-items: flex-start;
       margin-bottom: 15px;
       width: 100%;
@@ -4273,11 +4359,11 @@
       font-weight: 600;
       color: var(--text-color);
       margin: 0 0 10px 0;
-      overflow: visible;
+      overflow: hidden;
+      text-overflow: ellipsis;
       word-wrap: break-word;
       word-break: break-word;
       line-height: 1.4;
-      white-space: normal;
     }
 
     /* 已移除h3.book-title，样式已合并到book-card-header */
@@ -4515,14 +4601,21 @@
 <body>
   <!-- 文件输入隐藏组件 -->
   <input type="file" id="fileInput" accept=".txt" style="display: none;" title="选择TXT文件" />
+  <!-- 批量文件输入隐藏组件 -->
+  <input type="file" id="batchFileInput" accept=".txt" multiple style="display: none;" title="批量选择TXT文件" />
 
   <!-- 书籍缓存页面 -->
   <div id="booksPage" style="display: flex;">
     <div class="books-container">
       <div class="books-header">
         <h2 class="books-title">书架</h2>
-        <div class="books-cache-info" id="booksCacheInfo">
-          <span>缓存信息加载中...</span>
+        <div class="books-controls">
+          <div class="books-search-container">
+            <input type="text" id="bookSearch" placeholder="搜索书籍..." class="book-search-input">
+          </div>
+          <div class="books-actions">
+            <button id="batchImportBtn" class="books-action-btn">批量导入</button>
+          </div>
         </div>
       </div>
       <div class="books-content">
@@ -4534,6 +4627,9 @@
         <div class="no-books-icon">📚</div>
         <div class="no-books-text">暂无已缓存的书籍</div>
         <button class="no-books-btn" onclick="switchToUploadPage()">添加第一本书</button>
+      </div>
+      <div class="books-cache-info" id="booksCacheInfo">
+        <span>缓存信息加载中...</span>
       </div>
     </div>
   </div>
@@ -4565,8 +4661,8 @@
             <span class="book-title" id="bookTitle" style="font-weight: 700;"></span>
             <span id="currentFileName" style="margin-left: 8px; color: var(--secondary-text-color); font-size: 13px;"></span>
             <button class="book-reupload" onclick="switchToBooksPage()">返回书架</button>
-          </div>
         </div>
+      </div>
         <div class="progress-section">
           <div class="progress-header">
             <div class="progress-text">阅读进度 <span id="progressPercent">10%</span></div>
@@ -5110,6 +5206,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
     // DOM元素
     const appContainer = document.getElementById('appContainer');
     const fileInput = document.getElementById('fileInput');
+    const batchFileInput = document.getElementById('batchFileInput');
     const sidebarLeft = document.getElementById('sidebarLeft');
     const sidebarRight = document.getElementById('sidebarRight');
     const navDirectory = document.getElementById('navDirectory');
@@ -5400,7 +5497,199 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         booksPage.addEventListener('dragleave', handleDragLeave);
         booksPage.addEventListener('drop', handleFileDrop);
       }
+      
+      // 批量导入按钮事件监听
+      const batchImportBtn = document.getElementById('batchImportBtn');
+      if (batchImportBtn) {
+        batchImportBtn.addEventListener('click', function() {
+          batchFileInput.value = '';
+          batchFileInput.click();
+        });
+      }
+      
+      // 批量文件处理事件
+      batchFileInput.addEventListener('change', handleBatchFileUpload);
+      
+      // 搜索功能事件监听
+      const bookSearchInput = document.getElementById('bookSearch');
+      if (bookSearchInput) {
+        bookSearchInput.addEventListener('input', handleBookSearch);
+      }
     });
+    
+    // 处理书籍搜索
+    function handleBookSearch(e) {
+      const searchTerm = e.target.value.toLowerCase().trim();
+      const booksGrid = document.getElementById('booksGrid');
+      const noBooksMessage = document.getElementById('noBooksMessage');
+      
+      if (!booksGrid) return;
+      
+      // 如果没有搜索词，重新加载完整的书架
+      if (!searchTerm) {
+        loadBooksPage();
+        return;
+      }
+      
+      // 获取所有书籍信息
+      const recentFiles = JSON.parse(localStorage.getItem('reader_recent_files') || '[]');
+      
+      // 过滤匹配的书籍
+      const filteredBooks = recentFiles.filter(book => 
+        book.name?.toLowerCase().includes(searchTerm) || 
+        (book.title?.toLowerCase() || '').includes(searchTerm)
+      );
+      
+      // 清空现有网格内容
+      booksGrid.innerHTML = '';
+      
+      // 如果有匹配的书籍，显示它们
+      if (filteredBooks.length > 0) {
+        booksGrid.style.display = 'grid';
+        noBooksMessage.style.display = 'none';
+        
+        // 创建并添加书籍卡片
+        filteredBooks.forEach(bookInfo => {
+          const bookCard = createBookCard(bookInfo);
+          booksGrid.appendChild(bookCard);
+        });
+      } else {
+        // 没有匹配的书籍，显示空状态
+        booksGrid.style.display = 'none';
+        noBooksMessage.style.display = 'block';
+        noBooksMessage.textContent = `没有找到匹配"${searchTerm}"的书籍`;
+      }
+    }
+    
+    // 批量文件上传处理
+    function handleBatchFileUpload(e) {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+      
+      showToast(`开始批量导入 ${files.length} 个文件`, 'info');
+      
+      // 处理每个文件
+      let processedCount = 0;
+      let successCount = 0;
+      let errorCount = 0;
+      
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        processFileForCacheOnly(file)
+          .then(() => {
+            successCount++;
+          })
+          .catch((error) => {
+            console.error(`文件 ${file.name} 处理失败:`, error);
+            errorCount++;
+          })
+          .finally(() => {
+            processedCount++;
+            
+            // 显示处理进度
+            showToast(`已处理 ${processedCount}/${files.length} 个文件`, 'info');
+            
+            // 所有文件处理完成
+            if (processedCount === files.length) {
+              setTimeout(() => {
+                showToast(`批量导入完成: 成功 ${successCount} 个, 失败 ${errorCount} 个`, 'success');
+                // 刷新书架
+                loadBooksPage();
+              }, 500);
+            }
+          });
+      }
+    }
+    
+    // 仅缓存文件到书架，不打开阅读
+    async function processFileForCacheOnly(file) {
+      return new Promise(async (resolve, reject) => {
+        try {
+          // 为文件创建唯一标识
+          const fileId = file.name + '_' + file.size + '_' + file.lastModified;
+          
+          // 检查文件是否已存在
+          const recentFiles = JSON.parse(localStorage.getItem('reader_recent_files') || '[]');
+          if (recentFiles.some(f => f.id === fileId)) {
+            console.log(`文件 ${file.name} 已存在于书架中`);
+            resolve();
+            return;
+          }
+          
+          const reader = new FileReader();
+          reader.readAsArrayBuffer(file);
+          
+          reader.onload = async function(e) {
+            try {
+              const buffer = e.target.result;
+              const uint8Array = new Uint8Array(buffer);
+              
+              // 编码检测
+              const sampleSize = Math.min(uint8Array.length, 20000);
+              const sample = uint8Array.subarray(0, sampleSize);
+              let binaryString = "";
+              for (let i = 0; i < sample.length; i++) {
+                binaryString += String.fromCharCode(sample[i]);
+              }
+              
+              const detected = jschardet.detect(binaryString);
+              let encoding = detected.encoding || 'utf-8';
+              
+              if (encoding.toLowerCase() === 'gb2312' || encoding.toLowerCase() === 'ascii') {
+                encoding = 'gb18030';
+              }
+              
+              // 解码文件内容
+              const decoder = new TextDecoder(encoding);
+              const text = decoder.decode(uint8Array);
+              
+              // 简单解析检查（不进行完整解析以提高速度）
+              let title = file.name.replace(/\.txt$/, '');
+              let chapterCount = 0;
+              
+              // 简单统计章节数（基于常见章节标记）
+              const chapterRegex = /第[\s\d一二三四五六七八九十百千]+[章节卷集]/g;
+              const matches = text.match(chapterRegex);
+              if (matches) {
+                chapterCount = matches.length;
+              } else {
+                chapterCount = 1; // 默认1章
+              }
+              
+              // 保存到IndexedDB
+              await saveFileToIndexedDB(fileId, text);
+              
+              // 添加到最近文件列表
+              const fileInfo = {
+                id: fileId,
+                name: file.name,
+                size: file.size,
+                lastModified: file.lastModified,
+                lastRead: new Date().getTime(),
+                chapterCount: chapterCount,
+                title: title
+              };
+              
+              // 添加到列表开头
+              recentFiles.unshift(fileInfo);
+              localStorage.setItem('reader_recent_files', JSON.stringify(recentFiles));
+              
+              console.log(`文件 ${file.name} 已成功缓存到书架`);
+              resolve();
+            } catch (error) {
+              console.error(`文件 ${file.name} 处理失败:`, error);
+              reject(error);
+            }
+          };
+          
+          reader.onerror = function() {
+            reject(new Error(`无法读取文件 ${file.name}`));
+          };
+        } catch (error) {
+          reject(error);
+        }
+      });
+    }
 
     function handleFileUpload(e) {
       const file = e.target.files[0];
@@ -5983,10 +6272,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         </div>
         <div class="book-info">
           <div class="book-info-item">
-            <span>章节总数：<strong>${totalChapters || '未知'}</strong></span>
-          </div>
-          <div class="book-info-item">
-            <span>阅读章节：<strong>${readPages}</strong></span>
+            <span>章节数：<strong>${readPages}/${totalChapters || '未知'}</strong></span>
           </div>
           <div class="book-info-item">
             <span>人名数：<strong>${nameCount}</strong></span>
@@ -8059,6 +8345,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
               overflow: hidden;
               display: -webkit-box;
               -webkit-line-clamp: 2;
+              line-clamp: 2;
               -webkit-box-orient: vertical;
               line-height: 1.4;
               word-wrap: break-word;
@@ -8091,6 +8378,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
               overflow: hidden;
               display: -webkit-box;
               -webkit-line-clamp: 4;
+              line-clamp: 4;
               -webkit-box-orient: vertical;
             }
             
