@@ -13,7 +13,7 @@
   <!-- 为Windows Mobile设备设置状态栏颜色 -->
   <meta name="msapplication-navbutton-color" content="#ffffff" />
   
-  <title>电子书阅读器V0.5.7</title>
+  <title>电子书阅读器V0.5.8</title>
   <script src="https://cdn.jsdelivr.net/npm/jschardet@3.0.0/dist/jschardet.min.js"></script>
   <script>
     // 全局变量定义
@@ -468,7 +468,7 @@
       justify-content: space-between;
       align-items: center;
       padding: 8px 16px;
-      border-top: 1px solid var(--border-color);
+      border-top: none;
       margin-top: auto;
     }
     
@@ -477,7 +477,7 @@
       color: var(--accent-color);
       font-size: 14px;
       cursor: pointer;
-      text-decoration: underline;
+      text-decoration: none;
       transition: color 0.2s ease;
     }
     
@@ -4106,6 +4106,7 @@
         grid-template-columns: 1fr;
         gap: 16px;
         margin-bottom: 16px;
+        margin-top: 16px;
       }
       
       .book-card {
@@ -4136,10 +4137,9 @@
       justify-content: space-between;
       align-items: center;
       gap: 16px;
-      gap: 16px;
-      margin-bottom: 30px;
-      padding-bottom: 15px;
-      border-bottom: 1px solid var(--border-color);
+      margin-bottom: 0;
+      padding-bottom: 0;
+      border-bottom: none;
     }
     
     .books-actions {
@@ -4174,7 +4174,7 @@
     
     .book-search-input {
       padding: 6px 12px;
-      border: 1px solid var(--border-color);
+      border: 1px solid transparent;
       border-radius: 4px;
       font-size: 14px;
       width: 100%;
@@ -4186,7 +4186,7 @@
     
     .book-search-input:focus {
       outline: none;
-      border-color: var(--primary-color);
+      border-color: transparent;
       box-shadow: 0 0 0 2px rgba(58, 123, 213, 0.1);
     }
     
@@ -4230,8 +4230,8 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 20px;
-      border-bottom: 1px solid var(--border-color);
+      padding: 10px 20px;
+      border-bottom: none;
       flex-wrap: wrap;
       gap: 10px;
     }
@@ -4291,23 +4291,28 @@
 
     .books-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 12px;
-      margin-bottom: 20px;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 8px;
+      margin-bottom: 0;
+      margin-top: 16px;
       overflow: visible;
+      max-width: 1200px;
+      margin-left: auto;
+      margin-right: auto;
     }
 
     .book-card {
-      border: 1px solid var(--border-color);
-      border-radius: 12px;
+      border: none;
+      border-radius: 4px;
       background: var(--sidebar-bg);
-      padding: 12px;
+      padding: 12px 20px;
       cursor: pointer;
       transition: all 0.2s;
       display: flex;
       flex-direction: column;
       min-height: 160px;
       height: auto;
+      max-width: 400px;
     }
 
     .book-card:hover {
@@ -4685,7 +4690,7 @@
           <div class="book-title-row">
             <span class="book-title" id="bookTitle" style="font-weight: 700;"></span>
             <span id="currentFileName" style="margin-left: 8px; color: var(--secondary-text-color); font-size: 13px;"></span>
-            <button class="book-reupload" onclick="switchToBooksPage()">返回书架</button>
+            <button class="book-reupload" onclick="switchToBooksPage()">返回</button>
         </div>
       </div>
         <div class="progress-section">
@@ -5125,7 +5130,7 @@
       // 渲染控制标志
       lastRerenderReason: '', // 记录上次渲染的原因，用于控制特殊渲染流程
       // 基础设置
-      fontSize: 18, // 正文字号，默认18px（常规）
+      fontSize: 22, // 正文字号，默认22px（常规）
       lineHeight: 1.6, // 行间距，默认标准(1.6)
       paragraphSpacing: 0, // 段落间距，默认值为0em（无间距）
       fontFamily: '', // 字体，默认空字符串
@@ -5149,9 +5154,9 @@
       accentColor: '#0c8ce9', // 功能色（主题色）
       
       // 高亮设置
-      isDialogHighlightEnabled: false, // 对话高亮开关
-      dialogHighlightColor: 'yellow', // 对话高亮背景色（使用CSS变量名）
-      dialogHighlightType: 'background', // 对话高亮类型（'background'或'underline'）
+      isDialogHighlightEnabled: true, // 对话高亮开关
+      dialogHighlightColor: '#fff1c2', // 对话高亮背景色（统一默认黄色）
+      dialogHighlightType: 'underline', // 对话高亮类型（'background'或'underline'）
       dialogHighlightFontColor: 'yellow', // 对话高亮字体颜色，默认与背景色相同
       dialogPrefix: '“', // 对话前符号
       dialogSuffix: '”', // 对话后符号
@@ -5206,7 +5211,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         
       // 确保对话高亮颜色的CSS变量在每次更新局部变量时也被更新
       // 直接使用window.renderVariables中的值，确保获取最新设置
-      const currentDialogHighlightColor = window.renderVariables.dialogHighlightColor || 'yellow';
+      const currentDialogHighlightColor = window.renderVariables.dialogHighlightColor || '#999999';
       if (currentDialogHighlightColor.startsWith('#')) {
         // 自定义颜色，直接使用
         document.documentElement.style.setProperty('--dialog-highlight-color', currentDialogHighlightColor);
@@ -6383,7 +6388,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
             <span>人名数：<strong>${nameCount}</strong></span>
           </div>
         </div>
-        <div class="book-last-read">上次阅读：${formattedDate}</div>
+        <div class="book-last-read">${formattedDate}</div>
       `;
       
       // 添加点击事件
@@ -7904,7 +7909,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         if (window.renderVariables.isDialogHighlightEnabled) {
           try {
             // 直接从window.renderVariables获取最新的颜色值，确保章节切换时保持用户修改后的颜色
-            const currentDialogColor = window.renderVariables.dialogHighlightColor || 'yellow';
+            const currentDialogColor = window.renderVariables.dialogHighlightColor || '#999999';
             
             // 设置CSS变量 - 正确处理自定义颜色
             if (currentDialogColor.startsWith('#')) {
@@ -7916,7 +7921,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
             }
             
             // 使用当前选择的高亮类型
-            const highlightType = window.renderVariables.dialogHighlightType || 'background';
+            const highlightType = window.renderVariables.dialogHighlightType || 'underline';
             const prefix = window.renderVariables.dialogPrefix || '“';
             const suffix = window.renderVariables.dialogSuffix || '”';
             // 检查是否启用字体高亮
@@ -8309,8 +8314,8 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         
         <div class="function-item" onclick="openNameDialog()">
           <div class="function-info">
-            <div class="function-title">人名高亮</div>
-            <div class="function-desc">管理和自定义人名高亮显示</div>
+            <div class="function-title">👤 人名高亮</div>
+            <div class="function-desc">自定义关键词高亮</div>
           </div>
           <div class="toggle-switch ${window.renderVariables.isNameHighlightEnabled ? '' : 'off'}" onclick="(function(e) { e.stopPropagation(); toggleNameHighlightMaster(); })(event)">
             <div class="toggle-slider"></div>
@@ -8318,7 +8323,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         </div>
         <div class="function-item" onclick="openDialogHighlightDialog()">
           <div class="function-info">
-            <div class="function-title">对话高亮</div>
+            <div class="function-title">💬 对话高亮</div>
             <div class="function-desc">高亮引号内的对话内容</div>
           </div>
           <div class="toggle-switch ${window.renderVariables.isDialogHighlightEnabled ? '' : 'off'}" onclick="(function(e) { e.stopPropagation(); toggleDialogHighlight(); })(event)">
@@ -8328,7 +8333,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         
         <div class="function-item">
           <div class="function-info">
-            <div class="function-title">${window.renderVariables.isSeamlessScrollingEnabled ? '滚动翻页' : '默认翻页'}</div>
+            <div class="function-title">${window.renderVariables.isSeamlessScrollingEnabled ? '📜 滚动翻页' : '📖 默认翻页'}</div>
             <div class="function-desc">滚动底部自动加载页面（可双击切换）</div>
           </div>
           <div class="toggle-switch ${window.renderVariables.isSeamlessScrollingEnabled ? '' : 'off'}" onclick="(function(e) { e.stopPropagation(); toggleScrollingMode(); })(event)">
@@ -8338,7 +8343,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         
         <div class="function-item">
           <div class="function-info">
-            <div class="function-title">句号换行</div>
+            <div class="function-title">📝 句号换行</div>
             <div class="function-desc">有句号的地方自动换段落行</div>
           </div>
           <div class="toggle-switch ${window.renderVariables.isPeriodLineBreakEnabled ? '' : 'off'}" onclick="(function(e) { e.stopPropagation(); togglePeriodLineBreak(); })(event)">
@@ -8352,35 +8357,35 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         
         <div class="function-item" onclick="openFontSizeDialog()">
           <div class="function-info">
-            <div class="function-title">正文字号</div>
+            <div class="function-title">🔤 正文字号</div>
             <div class="function-desc">调整阅读字体大小</div>
           </div>
           <span class="function-arrow">&#8250;</span>
         </div>
         <div class="function-item" onclick="openFontWeightDialog()">
           <div class="function-info">
-            <div class="function-title">字体字重</div>
+            <div class="function-title">📏 字体字重</div>
             <div class="function-desc">调整阅读字体粗细</div>
           </div>
           <span class="function-arrow">&#8250;</span>
         </div>
         <div class="function-item" onclick="openLineHeightDialog()">
           <div class="function-info">
-            <div class="function-title">行间距</div>
+            <div class="function-title">📐 行间距</div>
             <div class="function-desc">调整段落行距</div>
           </div>
           <span class="function-arrow">&#8250;</span>
         </div>
         <div class="function-item" onclick="openParagraphSpacingDialog()">
           <div class="function-info">
-            <div class="function-title">段落间距</div>
+            <div class="function-title">📑 段落间距</div>
             <div class="function-desc">调整段落之间的间距</div>
           </div>
           <span class="function-arrow">&#8250;</span>
         </div>
         <div class="function-item" onclick="openMarginSettingsDialog()">
           <div class="function-info">
-            <div class="function-title">页边距设置</div>
+            <div class="function-title">📃 页边距设置</div>
             <div class="function-desc">调整阅读区域两侧的间距</div>
           </div>
           <span class="function-arrow">&#8250;</span>
@@ -8391,29 +8396,21 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         
         <div class="function-item" onclick="openThemeDialog()">
           <div class="function-info">
-            <div class="function-title">主题设置</div>
+            <div class="function-title">🎨 主题设置</div>
             <div class="function-desc">自定义界面主题和颜色</div>
-          </div>
-          <span class="function-arrow">&#8250;</span>
-        </div>
-        
-        <div class="function-item" onclick="openCacheManagementDialog()">
-          <div class="function-info">
-            <div class="function-title">文件管理</div>
-            <div class="function-desc">切换和管理文件缓存</div>
           </div>
           <span class="function-arrow">&#8250;</span>
         </div>
         
         <div class="function-item" onclick="openImportExportSettings()">
           <div class="function-info">
-            <div class="function-title">数据导入导出</div>
-            <div class="function-desc">备份和恢复阅读设置、笔记和高亮数据</div>
+            <div class="function-title">🔄 书籍数据同步</div>
+            <div class="function-desc">不同设备 相同书籍 进度同步</div>
           </div>
           <span class="function-arrow">&#8250;</span>
         </div>
         
-        <div class="function-divider"></div>
+
         
       `;
       
@@ -8467,7 +8464,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
                 font-size: 12px;
                 transition: all 0.2s;
               ">
-                导出
+                复制
               </button>
               <button class="notes-add-btn" onclick="addNewNote()" style="
                 display: flex;
@@ -9532,7 +9529,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       // 如果启用了对话高亮，确保应用当前选择的高亮类型和颜色
       if (isDialogHighlightEnabled) {
 
-        const dialogHighlightColor = window.renderVariables.dialogHighlightColor || 'yellow';
+        const dialogHighlightColor = window.renderVariables.dialogHighlightColor || '#999999';
         
         // 更新CSS变量，确保样式统一
         document.documentElement.style.setProperty('--dialog-highlight-color', `var(--dialog-highlight-${dialogHighlightColor})`);
@@ -10661,8 +10658,8 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
     // 打开对话高亮设置对话框
     function openDialogHighlightDialog() {
       // 确保使用window.renderVariables中的设置
-      const dialogHighlightColor = window.renderVariables.dialogHighlightColor || 'yellow';
-      const dialogHighlightType = window.renderVariables.dialogHighlightType || 'background';
+      const dialogHighlightColor = window.renderVariables.dialogHighlightColor || '#999999';
+      const dialogHighlightType = window.renderVariables.dialogHighlightType || 'underline';
       const isDialogFontHighlightEnabled = window.renderVariables.isDialogFontHighlightEnabled || false;
       const dialogPrefix = window.renderVariables.dialogPrefix || '“';
       const dialogSuffix = window.renderVariables.dialogSuffix || '”';
@@ -10675,6 +10672,11 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
           </div>
           
           <div class="dialog-highlight-control">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px; width: 100%;">
+              <label style="margin: 0;">当前颜色:</label>
+              <input type="color" id="customDialogColor" value="#fff1c2" style="width: 50px; height: 35px; border: none; cursor: pointer;" onchange="setCustomDialogColor()">
+            </div>
+            
             <label style="display: block; margin-bottom: 8px;">高亮类型</label>
             <div class="dialog-type-buttons" style="display: flex; gap: 10px; margin-bottom: 20px;">
               <button data-type="background" class="type-option ${dialogHighlightType === 'background' ? 'active' : ''}" onclick="setDialogHighlightType(this)">
@@ -10699,10 +10701,6 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
               <button data-color="gray" class="color-option ${dialogHighlightColor === 'gray' ? 'active' : ''}" onclick="setDialogColorOption(this)">
                 灰色
               </button>
-              <div style="display: flex; align-items: center; gap: 10px; margin-top: 10px; width: 100%;">
-                <label style="margin: 0;">当前颜色:</label>
-                <input type="color" id="customDialogColor" value="#fff1c2" style="width: 50px; height: 35px; border: none; cursor: pointer;" onchange="setCustomDialogColor()">
-              </div>
               
               <!-- 字体高亮开关，仅当下划线样式时显示 -->
               <div id="fontHighlightControl" style="margin-top: 20px; display: ${dialogHighlightType === 'underline' ? 'block' : 'none'};">
@@ -10791,17 +10789,13 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         }
       });
       
-      // 应用颜色到CSS变量
+      // 应用颜色到CSS变量（仅用于预览）
       document.documentElement.style.setProperty('--dialog-highlight-color', customColor);
-      
-      // 更新全局渲染变量，确保使用实际的十六进制颜色值
-      window.renderVariables.dialogHighlightColor = customColor;
-      
-      // 保存到localStorage，使用一致的键名
-      localStorage.setItem('readerDialogHighlightColor', customColor);
       
       // 更新预览
       updateDialogPreview();
+      
+      // 仅更新临时状态，不直接修改全局渲染变量和localStorage
     }
 
     // 关闭对话高亮设置对话框
@@ -10902,8 +10896,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         previewDialog.classList.remove('font-highlight');
       }
       
-      // 同步更新全局渲染变量，确保实时预览和最终应用一致
-      window.renderVariables.dialogHighlightColor = selectedColor;
+      // 仅更新预览，不修改全局渲染变量
     }
 
     // 设置对话颜色选项
@@ -10918,36 +10911,40 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       // 设置当前活动状态
       element.classList.add('active');
       
-      // 获取当前颜色并应用到CSS变量
-      const currentColor = getComputedStyle(element).backgroundColor;
-      document.documentElement.style.setProperty('--dialog-highlight-color', currentColor);
+      // 获取当前颜色选项值（从data-color属性）
+      const colorOption = element.dataset.color;
       
-      // 更新当前颜色输入框的值（需要将RGB转换为十六进制）
-      const rgbMatch = currentColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
-      let hexColor = '#fff1c2'; // 默认颜色
-      if (rgbMatch) {
-        hexColor = '#' + [rgbMatch[1], rgbMatch[2], rgbMatch[3]]
-          .map(x => parseInt(x).toString(16).padStart(2, '0'))
-          .join('');
-        const customColorInput = document.getElementById('customDialogColor');
-        if (customColorInput) {
-          customColorInput.value = hexColor;
-        }
+      // 预设颜色映射表
+      const colorMap = {
+        'yellow': '#fff1c2',
+        'blue': '#d1e0ff',
+        'red': '#ffd1d1',
+        'gray': '#cccccc'
+      };
+      
+      // 获取实际的十六进制颜色值
+      let hexColor = colorMap[colorOption] || '#fff1c2';
+      
+      // 应用颜色到CSS变量（仅用于预览）
+      document.documentElement.style.setProperty('--dialog-highlight-color', hexColor);
+      
+      // 更新当前颜色输入框的值
+      const customColorInput = document.getElementById('customDialogColor');
+      if (customColorInput) {
+        customColorInput.value = hexColor;
       }
       
       // 更新预览
       updateDialogPreview();
       
-      // 更新全局渲染变量和localStorage，使用实际的十六进制颜色值确保一致性
-      window.renderVariables.dialogHighlightColor = hexColor;
-      localStorage.setItem('readerDialogHighlightColor', hexColor);
+      // 仅更新临时状态，不直接修改全局渲染变量和localStorage
     }
     
     // 设置字体高亮颜色选项
     // 切换字体高亮功能
     function toggleDialogFontHighlight() {
       const isEnabled = document.getElementById('dialogFontHighlightToggle').checked;
-      window.renderVariables.isDialogFontHighlightEnabled = isEnabled;
+      // 仅更新预览，不直接修改全局渲染变量
       updateDialogPreview();
     }
 
@@ -10972,14 +10969,15 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       if (!isCustomColor) {
         for (const option of colorOptions) {
           if (option.classList.contains('active')) {
-            // 如果是预设颜色，获取其实际颜色值而不是名称
-            const currentColor = getComputedStyle(option).backgroundColor;
-            const rgbMatch = currentColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
-            if (rgbMatch) {
-              selectedColor = '#' + [rgbMatch[1], rgbMatch[2], rgbMatch[3]]
-                .map(x => parseInt(x).toString(16).padStart(2, '0'))
-                .join('');
-            }
+            // 使用预设颜色映射表获取颜色值
+            const colorOption = option.dataset.color;
+            const colorMap = {
+              'yellow': '#fff1c2',
+              'blue': '#d1e0ff',
+              'red': '#ffd1d1',
+              'gray': '#cccccc'
+            };
+            selectedColor = colorMap[colorOption] || '#fff1c2';
             break;
           }
         }
@@ -11008,11 +11006,16 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       const dialogPrefix = prefixInput ? prefixInput.value || '“' : '“';
       const dialogSuffix = suffixInput ? suffixInput.value || '”' : '”';
       
+      // 获取字体高亮开关状态
+      const fontHighlightToggle = document.getElementById('dialogFontHighlightToggle');
+      const isFontHighlightEnabled = fontHighlightToggle ? fontHighlightToggle.checked : false;
+      
       // 更新全局渲染变量
       window.renderVariables.dialogHighlightColor = selectedColor;
       window.renderVariables.dialogHighlightType = highlightType;
       window.renderVariables.dialogPrefix = dialogPrefix;
       window.renderVariables.dialogSuffix = dialogSuffix;
+      window.renderVariables.isDialogFontHighlightEnabled = isFontHighlightEnabled;
       
       // 更新对话正则表达式
       updateDialogRegex();
@@ -11785,10 +11788,10 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
               <input type="number" id="fontSizeInput" value="${fontSize}" step="1" style="width:70px;padding:4px 8px;border:1px solid var(--border-color);border-radius:6px;font-size:15px;outline:none;transition:border-color 0.2s;background:var(--background-color);color:var(--text-color);" onfocus="this.style.borderColor='var(--accent-color)'" onblur="this.style.borderColor='var(--border-color)'" oninput="onFontSizeInputChange(this)">
             </div>
             <div class="font-size-buttons">
-              <button onclick="setFontSize(16)">小</button>
-              <button onclick="setFontSize(18)">常规</button>
-              <button onclick="setFontSize(20)">大</button>
-              <button onclick="setFontSize(22)">特大</button>
+              <button onclick="setFontSize(18)">小</button>
+              <button onclick="setFontSize(20)">中</button>
+              <button onclick="setFontSize(22)">常规</button>
+              <button onclick="setFontSize(24)">大</button>
             </div>
           </div>
         `,
@@ -12705,9 +12708,9 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
     
     // 主题设置相关函数
     function openThemeDialog() {
-      // 确保isFollowSystemTheme变量存在
+      // 确保isFollowSystemTheme变量存在，默认勾选跟随系统主题
       if (typeof window.renderVariables.isFollowSystemTheme === 'undefined') {
-        window.renderVariables.isFollowSystemTheme = false;
+        window.renderVariables.isFollowSystemTheme = true;
       }
       
       const content = `
@@ -13096,9 +13099,9 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       
       // 检查系统主题偏好的函数
       function checkSystemThemePreference() {
-        // 初始化isFollowSystemTheme变量
+        // 初始化isFollowSystemTheme变量，默认勾选跟随系统主题
         if (typeof window.renderVariables.isFollowSystemTheme === 'undefined') {
-          window.renderVariables.isFollowSystemTheme = false;
+          window.renderVariables.isFollowSystemTheme = true;
           // 检查localStorage中是否有保存的跟随系统设置
           const savedFollowSystem = localStorage.getItem('readerFollowSystemTheme');
           if (savedFollowSystem) {
@@ -13357,7 +13360,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
             // 应用对话高亮（引号内内容）
             if (window.renderVariables.isDialogHighlightEnabled) {
               // 确保使用正确的颜色值
-              const currentDialogColor = window.renderVariables.dialogHighlightColor || 'yellow';
+              const currentDialogColor = window.renderVariables.dialogHighlightColor || '#999999';
               
               // 正确处理自定义颜色
               if (currentDialogColor.startsWith('#')) {
@@ -13369,7 +13372,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
               }
               
               // 使用当前选择的高亮类型
-              const highlightType = window.renderVariables.dialogHighlightType || 'background';
+              const highlightType = window.renderVariables.dialogHighlightType || 'underline';
               // 使用统一的正则表达式变量以保持一致性
               const prefix = window.renderVariables.dialogPrefix || '“';
               const suffix = window.renderVariables.dialogSuffix || '”';
@@ -13519,7 +13522,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
             // 应用对话高亮（引号内内容）
             if (window.renderVariables.isDialogHighlightEnabled) {
               // 确保使用正确的颜色值
-              const currentDialogColor = window.renderVariables.dialogHighlightColor || 'yellow';
+              const currentDialogColor = window.renderVariables.dialogHighlightColor || '#999999';
               
               // 正确处理自定义颜色
               if (currentDialogColor.startsWith('#')) {
@@ -13531,7 +13534,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
               }
               
               // 使用当前选择的高亮类型
-              const highlightType = window.renderVariables.dialogHighlightType || 'background';
+              const highlightType = window.renderVariables.dialogHighlightType || 'underline';
               highlightedText = highlightedText.replace(new RegExp(escapeRegExp(window.renderVariables.dialogPrefix) + '([^' + escapeRegExp(window.renderVariables.dialogSuffix) + ']+)' + escapeRegExp(window.renderVariables.dialogSuffix), 'g'), function(match, content) {
                 return window.renderVariables.dialogPrefix + '<span class="highlight-dialog ' + highlightType + '">' + escapeHTML(content) + '</span>' + window.renderVariables.dialogSuffix;
               });
@@ -18326,6 +18329,9 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       ModalSystem.closeModal('cacheManagementDialog');
     }
     
+    // 打开初始化设置对话框
+
+    
     // 设置文件卡片选择功能 - 适配合并后的布局
     function setupFileCardSelection() {
       // 为文件卡片添加点击选中事件，但不影响底部按钮状态，因为我们只保留了清空所有缓存和关闭按钮
@@ -19763,7 +19769,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       }
     }
 
-    // 导出笔记
+    // 复制笔记到剪贴板
     function exportNotes() {
       if (!currentFileId) {
         showToast('请先打开文件', 'error');
@@ -19777,64 +19783,53 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       }
       
       const dataStr = JSON.stringify(notes, null, 2);
-      const dataBlob = new Blob([dataStr], { type: 'application/json' });
-      const url = URL.createObjectURL(dataBlob);
       
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${currentFileName}_笔记_${new Date().getTime()}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      
-      showToast('笔记导出成功', 'success');
+      // 使用剪贴板API复制数据
+      navigator.clipboard.writeText(dataStr).then(() => {
+        showToast('笔记已复制到剪贴板', 'success');
+      }).catch(err => {
+        console.error('复制笔记到剪贴板失败:', err);
+        showToast('复制笔记失败，请手动选择笔记内容复制', 'error');
+      });
     }
 
-    // 导入笔记
+    // 从剪贴板导入笔记
     function importNotes() {
       if (!currentFileId) {
         showToast('请先打开文件', 'error');
         return;
       }
       
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = '.json';
-      input.style.display = 'none';
-      
-      input.onchange = function(event) {
-        const file = event.target.files[0];
-        if (!file) return;
+      // 使用剪贴板API读取数据
+      navigator.clipboard.readText().then(text => {
+        if (!text) {
+          showToast('剪贴板中没有笔记数据', 'info');
+          return;
+        }
         
-        const reader = new FileReader();
-        reader.onload = function(e) {
-          try {
-            const importedNotes = JSON.parse(e.target.result);
-            if (!Array.isArray(importedNotes)) {
-              showToast('无效的笔记文件格式', 'error');
-              return;
-            }
-            
-            // 保存导入的笔记
-            saveNotes(currentFileId, importedNotes);
-            
-            // 重新渲染笔记列表
-            renderNotesList();
-            updateNotesProgress();
-            
-            showToast(`成功导入 ${importedNotes.length} 条笔记`, 'success');
-          } catch (error) {
-            console.error('导入笔记失败:', error);
-            showToast('导入笔记失败，请检查文件格式', 'error');
+        try {
+          const importedNotes = JSON.parse(text);
+          if (!Array.isArray(importedNotes)) {
+            showToast('无效的笔记格式', 'error');
+            return;
           }
-        };
-        reader.readAsText(file);
-      };
-      
-      document.body.appendChild(input);
-      input.click();
-      document.body.removeChild(input);
+          
+          // 保存导入的笔记
+          saveNotes(currentFileId, importedNotes);
+          
+          // 重新渲染笔记列表
+          renderNotesList();
+          updateNotesProgress();
+          
+          showToast(`成功导入 ${importedNotes.length} 条笔记`, 'success');
+        } catch (error) {
+          console.error('导入笔记失败:', error);
+          showToast('导入笔记失败，请检查笔记格式', 'error');
+        }
+      }).catch(err => {
+        console.error('从剪贴板读取笔记失败:', err);
+        showToast('读取剪贴板失败，请手动粘贴笔记数据', 'error');
+      });
     }
 
     // 处理笔记搜索
@@ -19975,7 +19970,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
           background: ${note.isChecked ? 'rgba(0, 0, 0, 0.05)' : 'var(--card-background)'};
           border: 1px solid var(--border-color);
           border-left: 4px solid ${note.isChecked ? 'var(--success-color, #4CAF50)' : 'var(--accent-color)'};
-          border-radius: 12px;
+          border-radius: 4px;
           padding: 16px;
           transition: all 0.3s ease;
           cursor: pointer;
@@ -20259,18 +20254,24 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       };
       
       const dataStr = JSON.stringify(exportData, null, 2);
-      const dataBlob = new Blob([dataStr], { type: 'application/json' });
-      const url = URL.createObjectURL(dataBlob);
       
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${currentFileName}_阅读数据_${new Date().getTime()}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      
-      showToast('所有数据导出成功', 'success');
+      // 使用剪贴板API复制数据
+      navigator.clipboard.writeText(dataStr).then(() => {
+        showToast('当前数据已复制到剪贴板', 'success');
+      }).catch(err => {
+        console.error('复制到剪贴板失败:', err);
+        showToast('复制失败，请手动复制以下数据', 'error');
+        
+        // 显示一个临时的文本区域让用户手动复制
+        const tempTextarea = document.createElement('textarea');
+        tempTextarea.value = dataStr;
+        tempTextarea.style.position = 'fixed';
+        tempTextarea.style.opacity = '0';
+        document.body.appendChild(tempTextarea);
+        tempTextarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(tempTextarea);
+      });
     }
 
     // 导入所有数据
@@ -20280,103 +20281,132 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         return;
       }
       
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = '.json';
-      input.style.display = 'none';
-      
-      input.onchange = function(event) {
-        const file = event.target.files[0];
-        if (!file) return;
-        
-        const reader = new FileReader();
-        reader.onload = function(e) {
-          try {
-            const importedData = JSON.parse(e.target.result);
-            
-            // 检查数据格式
-            if (!importedData || typeof importedData !== 'object') {
-              showToast('无效的数据文件格式', 'error');
-              return;
-            }
-            
-            // 添加确认对话框，询问是否覆盖当前数据
-            ModalSystem.createModal({
-              id: 'confirmImportModal',
-              title: '确认导入',
-              content: `
-                <div style="padding: 16px 0;">
-                  <p style="margin: 0 0 12px 0; color: var(--text-color);">
-                    导入数据将覆盖当前文件的所有设置（包括阅读进度、人名高亮和笔记等）。
-                  </p>
-                  <p style="margin: 0; color: var(--text-color-secondary); font-size: 14px;">
-                    确定要继续导入吗？
-                  </p>
-                </div>
-              `,
-              width: '400px',
-              buttons: [
-                {
-                  text: '取消',
-                  type: 'secondary'
-                },
-                {
-                  text: '确定导入',
-                  type: 'primary',
-                  onClick: function() {
-                    // 应用阅读设置
-                    if (importedData.readerSettings) {
-                      Object.assign(window.renderVariables, importedData.readerSettings);
-                    }
-                    
-                    // 应用阅读进度
-                    if (importedData.progress && importedData.progress.currentIndex !== undefined) {
-                      currentIndex = importedData.progress.currentIndex;
-                      if (volData && currentIndex >= 0 && currentIndex < volData.length) {
-                        renderCurrentChapter();
+      // 创建一个包含文本区域的模态框让用户粘贴数据
+      ModalSystem.createModal({
+        id: 'pasteImportModal',
+        title: '导入数据',
+        content: `
+          <div style="padding: 16px 0;">
+            <p style="margin: 0 0 12px 0; color: var(--text-color);">
+              请粘贴要导入的数据（从剪贴板复制的JSON格式）：
+            </p>
+            <textarea id="importDataTextarea" style="width: 100%; height: 200px; padding: 12px; font-size: 14px; border: 1px solid var(--border-color); border-radius: 4px; background-color: var(--background-color); color: var(--text-color); resize: vertical;" placeholder="在此粘贴JSON数据..."></textarea>
+          </div>
+        `,
+        width: '500px',
+        buttons: [
+          {
+            text: '取消',
+            type: 'secondary',
+            close: true
+          },
+          {
+            text: '导入',
+            type: 'primary',
+            onClick: function() {
+              const textarea = document.getElementById('importDataTextarea');
+              const dataStr = textarea.value.trim();
+              
+              if (!dataStr) {
+                showToast('请输入要导入的数据', 'error');
+                return;
+              }
+              
+              try {
+                const importedData = JSON.parse(dataStr);
+                
+                // 检查数据格式
+                if (!importedData || typeof importedData !== 'object') {
+                  showToast('无效的数据格式', 'error');
+                  return;
+                }
+                
+                // 显示确认对话框
+                ModalSystem.createModal({
+                  id: 'confirmImportModal',
+                  title: '确认导入',
+                  content: `
+                    <div style="padding: 16px 0;">
+                      <p style="margin: 0 0 12px 0; color: var(--text-color);">
+                        导入数据将覆盖当前文件的所有设置（包括阅读进度、人名高亮和笔记等）。
+                      </p>
+                      <p style="margin: 0; color: var(--text-color-secondary); font-size: 14px;">
+                        确定要继续导入吗？
+                      </p>
+                    </div>
+                  `,
+                  width: '400px',
+                  buttons: [
+                    {
+                      text: '取消',
+                      type: 'secondary'
+                    },
+                    {
+                      text: '确定导入',
+                      type: 'primary',
+                      onClick: function() {
+                        // 应用阅读设置
+                        if (importedData.readerSettings) {
+                          Object.assign(window.renderVariables, importedData.readerSettings);
+                        }
+                        
+                        // 应用阅读进度
+                        if (importedData.progress && importedData.progress.currentIndex !== undefined) {
+                          currentIndex = importedData.progress.currentIndex;
+                          if (volData && currentIndex >= 0 && currentIndex < volData.length) {
+                            renderChapter();
+                          }
+                        }
+                        
+                        // 应用人名高亮
+                        if (importedData.nameHighlight) {
+                          window.renderVariables.isNameHighlightEnabled = importedData.nameHighlight.isEnabled || false;
+                          window.renderVariables.currentNames = importedData.nameHighlight.currentNames || [];
+                          window.renderVariables.disabledNames = importedData.nameHighlight.disabledNames || [];
+                          window.renderVariables.nameGroups = importedData.nameHighlight.nameGroups || {};
+                          window.renderVariables.globalNameColorMap = importedData.nameHighlight.globalNameColorMap || {};
+                        }
+                        
+                        // 应用笔记
+                        if (importedData.notes && Array.isArray(importedData.notes)) {
+                          saveNotes(currentFileId, importedData.notes);
+                          renderNotesList();
+                          updateNotesProgress();
+                        }
+                        
+                        // 保存所有设置
+                        saveProgress();
+                        
+                        showToast('数据导入成功', 'success');
+                        ModalSystem.closeModal('confirmImportModal');
+                        ModalSystem.closeModal('pasteImportModal');
                       }
                     }
-                    
-                    // 应用人名高亮
-                    if (importedData.nameHighlight) {
-                      window.renderVariables.isNameHighlightEnabled = importedData.nameHighlight.isEnabled || false;
-                      window.renderVariables.currentNames = importedData.nameHighlight.currentNames || [];
-                      window.renderVariables.disabledNames = importedData.nameHighlight.disabledNames || [];
-                      window.renderVariables.nameGroups = importedData.nameHighlight.nameGroups || {};
-                      window.renderVariables.globalNameColorMap = importedData.nameHighlight.globalNameColorMap || {};
-                    }
-                    
-                    // 应用笔记
-                    if (importedData.notes && Array.isArray(importedData.notes)) {
-                      saveNotes(currentFileId, importedData.notes);
-                      renderNotesList();
-                      updateNotesProgress();
-                    }
-                    
-                    // 保存所有设置
-                    saveProgress();
-                    
-                    showToast('数据导入成功', 'success');
-                    ModalSystem.closeModal('confirmImportModal');
-                  }
-                }
-              ],
-              closeOnOverlayClick: true
-            });
-          } catch (error) {
-            console.error('导入数据失败:', error);
-            showToast('导入数据失败，请检查文件格式', 'error');
+                  ],
+                  closeOnOverlayClick: true
+                });
+              } catch (error) {
+                console.error('导入数据失败:', error);
+                showToast('导入数据失败，请检查JSON格式', 'error');
+              }
+            }
           }
-        };
-        reader.readAsText(file);
-      };
+        ],
+        closeOnOverlayClick: true
+      });
       
-      document.body.appendChild(input);
-      input.click();
-      document.body.removeChild(input);
+      // 尝试从剪贴板自动粘贴
+      navigator.clipboard.readText().then(text => {
+        const textarea = document.getElementById('importDataTextarea');
+        if (textarea && text) {
+          textarea.value = text;
+        }
+      }).catch(err => {
+        // 如果剪贴板API不可用，不做处理，用户可以手动粘贴
+      });
     }
 
-    // 打开导入导出设置弹窗
+    // 打开书籍数据同步设置弹窗
     function openImportExportSettings() {
       // 获取当前数据信息
       const notes = getCurrentFileNotes() || [];
@@ -20389,24 +20419,24 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       const lineHeight = window.renderVariables.lineHeight || '1.5';
       const paragraphSpacing = window.renderVariables.paragraphSpacing || '10px';
       const fontFamily = window.renderVariables.fontFamily || '默认';
-      const dialogHighlightColor = window.renderVariables.dialogHighlightColor || 'yellow';
+      const dialogHighlightColor = window.renderVariables.dialogHighlightColor || '#999999';
 
       const isTraditionalPageTurningEnabled = window.renderVariables.isTraditionalPageTurningEnabled ? '启用' : '禁用';
       const isSeamlessScrollingEnabled = window.renderVariables.isSeamlessScrollingEnabled ? '启用' : '禁用';
       
       const content = `
         <div class="import-export-settings">
-          <h3 style="margin-bottom: 20px; color: var(--text-color);">数据导入导出</h3>
+          <h3 style="margin-bottom: 20px; color: var(--text-color);">书籍数据同步</h3>
           
-          <!-- 数据导入导出功能 -->
+          <!-- 书籍数据同步功能 -->
           <div class="setting-group" style="margin-bottom: 25px;">
             <div class="setting-item" style="margin-bottom: 12px;">
-              <label style="display: inline-block; width: 200px; color: var(--text-color);">导出所有数据:</label>
-              <button class="modal-btn secondary" onclick="exportAllData()" style="width: 120px;">导出</button>
+              <label style="display: inline-block; width: 200px; color: var(--text-color);">复制当前数据:</label>
+              <button class="modal-btn secondary" onclick="exportAllData()" style="width: 120px;">复制</button>
             </div>
             <div class="setting-item" style="margin-bottom: 12px;">
-              <label style="display: inline-block; width: 200px; color: var(--text-color);">导入所有数据:</label>
-              <button class="modal-btn secondary" onclick="importAllData()" style="width: 120px;">导入</button>
+              <label style="display: inline-block; width: 200px; color: var(--text-color);">粘贴板导入同步:</label>
+              <button class="modal-btn secondary" onclick="importAllData()" style="width: 120px;">粘贴</button>
             </div>
           </div>
           
@@ -20471,7 +20501,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
           <div style="padding: 15px; background-color: var(--background-color-light); border-radius: 8px; font-size: 13px; color: var(--secondary-text-color);">
             <p>说明:</p>
             <ul style="margin-top: 8px; margin-bottom: 0;">
-              <li>所有数据导出包含：阅读设置、阅读进度、人名高亮和笔记</li>
+              <li>所有数据同步包含：阅读设置、阅读进度、人名高亮和笔记</li>
               <li>导入数据会覆盖当前文件的所有设置和数据</li>
               <li>建议在导入前备份重要数据</li>
             </ul>
@@ -20481,7 +20511,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       
       ModalSystem.createModal({
         id: 'importExportSettingsDialog',
-        title: '数据导入导出',
+        title: '书籍数据同步',
         content: content,
         large: false,
         buttons: [
@@ -20505,7 +20535,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         'yellow': '#fff1c2',
         'blue': '#d1e0ff',
         'red': '#ffd1d1',
-        'gray': '#ffffff'
+        'gray': '#cccccc'
       };
       
       // 如果颜色值不存在，使用默认黄色
