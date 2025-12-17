@@ -1051,14 +1051,14 @@
     .chapter-title {
       color: var(--text-color);
       opacity: 0.7;
-      font-size: 13px;
+      font-size: calc(var(--font-size, 16px) * 2);
       font-weight: 400;
     }
 
     .chapter-number {
       color: var(--text-color);
       opacity: 0.3;
-      font-size: 13px;
+      font-size: calc(var(--font-size, 16px) * 2);
       font-weight: 400;
     }
 
@@ -3994,7 +3994,7 @@
     }
     /* 正文大标题左对齐样式 */
     .chapter-main-title {
-      font-size: 32px;
+      font-size: calc(var(--font-size, 16px) * 2);
       font-weight: 700;
       color: var(--text-color);
       text-align: left;
@@ -12958,7 +12958,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       document.documentElement.style.setProperty('--accent-color', accentColor);
       
       // 更新状态栏背景色
-      updateStatusBarBackgroundColor(backgroundColor);
+      updateStatusBarThemeColor();
       
       // 保存主题设置到localStorage
       localStorage.setItem('readerFollowSystemTheme', isFollowSystemTheme);
@@ -13094,7 +13094,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       
       // 初始化状态栏背景色
       if (window.renderVariables) {
-        updateStatusBarBackgroundColor(window.renderVariables.backgroundColor);
+        updateStatusBarThemeColor();
       }
       
       // 检查系统主题偏好的函数
@@ -13143,7 +13143,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
           document.documentElement.style.setProperty('--accent-color', window.renderVariables.accentColor);
           
           // 更新状态栏背景色
-          updateStatusBarBackgroundColor(window.renderVariables.backgroundColor);
+          updateStatusBarThemeColor();
           
           // 更新局部变量以同步渲染变量系统
           updateLocalRenderVariables();
@@ -20559,7 +20559,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
     window.addEventListener('load', function() {
       initTextSelectionListener();
       // 初始化移动端状态栏背景色
-      updateStatusBarBackgroundColor();
+      updateStatusBarThemeColor();
       
       // 从localStorage加载全局对话高亮设置
       const savedIsDialogHighlightEnabled = localStorage.getItem('readerDialogHighlightEnabled');
