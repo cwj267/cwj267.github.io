@@ -13,7 +13,7 @@
   <!-- 为Windows Mobile设备设置状态栏颜色 -->
   <meta name="msapplication-navbutton-color" content="#ffffff" />
   
-  <title>电子书阅读器V0.5.8</title>
+  <title>电子书阅读器V0.5.9</title>
   <script src="https://cdn.jsdelivr.net/npm/jschardet@3.0.0/dist/jschardet.min.js"></script>
   <script>
     // 全局变量定义
@@ -1051,14 +1051,14 @@
     .chapter-title {
       color: var(--text-color);
       opacity: 0.7;
-      font-size: calc(var(--font-size, 16px) * 2);
+      font-size: calc(var(--font-size, 16px) + 8px);
       font-weight: 400;
     }
 
     .chapter-number {
       color: var(--text-color);
       opacity: 0.3;
-      font-size: calc(var(--font-size, 16px) * 2);
+      font-size: calc(var(--font-size, 16px) + 8px);
       font-weight: 400;
     }
 
@@ -3994,7 +3994,7 @@
     }
     /* 正文大标题左对齐样式 */
     .chapter-main-title {
-      font-size: calc(var(--font-size, 16px) * 2);
+      font-size: calc(var(--font-size, 16px) + 8px);
       font-weight: 700;
       color: var(--text-color);
       text-align: left;
@@ -12720,15 +12720,15 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         </div>
         
         <div class="theme-options">
-          <div class="theme-option ${currentTheme === 'light' ? 'active' : ''}" onclick="selectTheme('light')">
+          <div class="theme-option ${!window.renderVariables.isFollowSystemTheme && currentTheme === 'light' ? 'active' : ''}" onclick="selectTheme('light')">
             <div class="theme-option-icon">☀️</div>
             <div class="theme-option-name">浅色主题</div>
           </div>
-          <div class="theme-option ${currentTheme === 'dark' ? 'active' : ''}" onclick="selectTheme('dark')">
+          <div class="theme-option ${!window.renderVariables.isFollowSystemTheme && currentTheme === 'dark' ? 'active' : ''}" onclick="selectTheme('dark')">
             <div class="theme-option-icon">🌙</div>
             <div class="theme-option-name">深色主题</div>
           </div>
-          <div class="theme-option ${currentTheme === 'sepia' ? 'active' : ''}" onclick="selectTheme('sepia')">
+          <div class="theme-option ${!window.renderVariables.isFollowSystemTheme && currentTheme === 'sepia' ? 'active' : ''}" onclick="selectTheme('sepia')">
             <div class="theme-option-icon">📖</div>
             <div class="theme-option-name">护眼模式</div>
           </div>
@@ -12920,6 +12920,13 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       // 从渲染变量系统获取主题值
       let currentTheme = window.renderVariables.currentTheme;
       let { textColor, backgroundColor, accentColor, isFollowSystemTheme } = window.renderVariables;
+      
+      // 如果开启了跟随系统主题，清除所有主题选项的active状态
+      if (isFollowSystemTheme) {
+        document.querySelectorAll('.theme-option').forEach(option => {
+          option.classList.remove('active');
+        });
+      }
       
       // 如果开启了跟随系统主题，立即检测系统当前主题并更新currentTheme
       if (isFollowSystemTheme) {
@@ -13315,11 +13322,10 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         // 添加章节间留白，使用与阅读页一级标题一致的样式
         const spacing = document.createElement('div');
         spacing.className = 'chapter-seamless-spacing';
-        spacing.style.height = '320px'; // 与下一章保持一致的留白高度
         spacing.style.textAlign = 'left'; // 与阅读页一级标题一致的左对齐
         spacing.style.color = 'var(--text-color)'; // 与阅读页一级标题一致的文本颜色
         spacing.style.opacity = '1'; // 不透明度设为1，与阅读页一级标题一致
-        spacing.style.padding = '20px 0 0 0'; // 调整内边距
+        spacing.style.padding = '100px 0 0 0'; // 调整内边距，增加章节间距
         spacing.style.fontSize = '20px'; // 与阅读页一级标题一致的字体大小
         spacing.style.fontWeight = '700'; // 与阅读页一级标题一致的字重
         spacing.textContent = prevChapter.title; // 直接显示章节标题，不添加分隔符
@@ -13496,11 +13502,10 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         // 添加章节间留白，使用与阅读页一级标题一致的样式
         const spacing = document.createElement('div');
         spacing.className = 'chapter-seamless-spacing';
-        spacing.style.height = '320px'; // 增加留白高度，从160px调整为320px
         spacing.style.textAlign = 'left'; // 与阅读页一级标题一致的左对齐
         spacing.style.color = 'var(--text-color)'; // 与阅读页一级标题一致的文本颜色
         spacing.style.opacity = '1'; // 不透明度设为1，与阅读页一级标题一致
-        spacing.style.padding = '20px 0 0 0'; // 调整内边距
+        spacing.style.padding = '100px 0 0 0'; // 调整内边距，增加章节间距
         spacing.style.fontSize = '20px'; // 与阅读页一级标题一致的字体大小
         spacing.style.fontWeight = '700'; // 与阅读页一级标题一致的字重
         spacing.textContent = nextChapter.title; // 直接显示章节标题，不添加分隔符
