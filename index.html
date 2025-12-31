@@ -9430,21 +9430,54 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       
       // 批量收集所有更新信息，避免频繁DOM操作
       paragraphs.forEach(paragraph => {
-        // 获取清理后的文本（移除现有的人名高亮）
+        // 获取清理后的内容（移除现有的人名高亮，但保留其他HTML结构）
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = paragraph.innerHTML;
-        const existingHighlights = tempDiv.querySelectorAll('.highlight-name');
-        existingHighlights.forEach(highlight => {
+        const existingNameHighlights = tempDiv.querySelectorAll('.highlight-name');
+        existingNameHighlights.forEach(highlight => {
           const textNode = document.createTextNode(highlight.textContent);
           highlight.parentNode.replaceChild(textNode, highlight);
         });
-        const cleanText = tempDiv.textContent;
+        
+        // 使用innerHTML来保留对话高亮等其他HTML结构
+        let cleanContent = tempDiv.innerHTML;
         
         // 准备新的内容
-        let newContent = cleanText;
+        let newContent = cleanContent;
         if (window.renderVariables.isNameHighlightEnabled && window.renderVariables.currentNames.length > 0) {
           try {
-            newContent = highlightNamesInText(cleanText);
+            // 创建临时div来处理包含HTML的内容
+            const contentDiv = document.createElement('div');
+            contentDiv.innerHTML = cleanContent;
+            
+            // 处理每个文本节点
+            const processNode = (node) => {
+              if (node.nodeType === Node.TEXT_NODE) {
+                const highlightedText = highlightNamesInText(node.textContent);
+                if (highlightedText !== node.textContent) {
+                  const fragment = document.createDocumentFragment();
+                  const temp = document.createElement('div');
+                  temp.innerHTML = highlightedText;
+                  while (temp.firstChild) {
+                    fragment.appendChild(temp.firstChild);
+                  }
+                  node.parentNode.replaceChild(fragment, node);
+                }
+              } else if (node.nodeType === Node.ELEMENT_NODE && node.tagName !== 'SCRIPT' && node.tagName !== 'STYLE') {
+                // 只处理非脚本和样式元素，并且跳过对话高亮元素，避免重复处理
+                if (!node.classList.contains('highlight-dialog')) {
+                  let child = node.firstChild;
+                  while (child) {
+                    const nextChild = child.nextSibling;
+                    processNode(child);
+                    child = nextChild;
+                  }
+                }
+              }
+            };
+            
+            processNode(contentDiv);
+            newContent = contentDiv.innerHTML;
           } catch (e) {
             console.error('人名高亮处理出错:', e);
             // 出错时保持原始内容不变
@@ -14831,6 +14864,12 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       if (index < 0 || index >= flatChapters.length) return;
       // 先更新局部变量以确保使用最新的设置
       updateLocalRenderVariables();
+      
+      // 清空已加载章节数组，确保从新位置开始加载
+      loadedChapters = [];
+      // 将当前章节添加到已加载数组
+      loadedChapters.push(index);
+      
       currentIndex = index;
       renderChapter();
       renderDirectory();
