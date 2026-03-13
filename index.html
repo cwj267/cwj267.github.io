@@ -15,7 +15,8 @@
   
   <title>电子书阅读器V0.5.9</title>
   <script src="https://cdn.jsdelivr.net/npm/jschardet@3.0.0/dist/jschardet.min.js"></script>
-  
+  <!-- IconPark图标库 -->
+  <script src="https://cdn.jsdelivr.net/npm/@icon-park/svg-icons@1.3.5/dist/index.min.js"></script>
   
 
   <link rel="stylesheet" href="css/styles.css">
@@ -51,7 +52,135 @@
           <span>缓存信息加载中...</span>
         </div>
         <div class="books-manage-section">
-          <span class="manage-text" onclick="openCacheManagementDialog()">管理</span>
+          <span class="manage-btn" onclick="openCacheManagementDialog()" title="管理">
+            <i class="nav-icon" id="iconManage"></i>
+            <span>文件管理</span>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 书籍导入检查页面 -->
+  <div id="importCheckPage" style="display: none; width: 100vw; height: 100vh; overflow: hidden;">
+    <div class="import-check-container">
+      <div class="import-check-header">
+        <button class="import-check-back-btn" onclick="switchToBooksPage()">
+          <i class="nav-icon" id="iconImportBack"></i>
+          <span>返回</span>
+        </button>
+        <h2 class="import-check-title" id="importCheckTitle">书籍导入</h2>
+        <div class="import-check-actions">
+          <button class="import-check-delete-btn" id="importDeleteBtn" onclick="deleteImportingBook()">
+            <i class="nav-icon" id="iconImportDelete"></i>
+            <span>删除</span>
+          </button>
+        </div>
+      </div>
+      <div class="import-check-content">
+        <div class="import-check-section">
+          <h3 class="import-check-section-title">书籍信息</h3>
+          <div class="import-info-grid" id="importInfoGrid">
+            <!-- 书籍信息将动态生成 -->
+          </div>
+        </div>
+        
+        <div class="import-check-section">
+          <h3 class="import-check-section-title">编码检查</h3>
+          <div class="encoding-check-container" id="encodingCheckContainer">
+            <!-- 编码检查结果将动态生成 -->
+          </div>
+        </div>
+        
+        <div class="import-check-section">
+          <h3 class="import-check-section-title">目录分卷分章检查</h3>
+          <div class="directory-check-container" id="directoryCheckContainer">
+            <!-- 目录检查结果将动态生成 -->
+          </div>
+        </div>
+        
+        <div class="import-check-section">
+          <h3 class="import-check-section-title">目录预览</h3>
+          <div class="import-directory-container" id="importDirectoryContainer">
+            <!-- 目录预览将动态生成 -->
+          </div>
+        </div>
+        
+        <div class="import-check-section">
+          <h3 class="import-check-section-title">工具列表</h3>
+          <div class="import-tools-note" style="margin-bottom: 12px; font-size: 13px; color: var(--nav-text); line-height: 1.6;">
+            如有不支持的格式，请使用工具复制结构给作者微信cwj267，1天内解决
+          </div>
+          <div class="import-tools-container" id="importToolsContainer">
+            <button class="import-tool-btn" onclick="copyBookDirectoryStructure()">
+              <i class="nav-icon" id="iconCopyFormat"></i>
+              <span>复制书籍目录结构</span>
+            </button>
+            <button class="import-tool-btn" onclick="tryFixEncoding()">
+              <i class="nav-icon" id="iconFixEncoding"></i>
+              <span>尝试修复编码</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="import-check-footer">
+        <button class="import-cancel-btn" onclick="switchToBooksPage()">取消</button>
+        <button class="import-confirm-btn" id="importConfirmBtn" onclick="confirmImport()">确认导入并阅读</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 书籍详情页面 -->
+  <div id="bookDetailPage" style="display: none; width: 100vw; height: 100vh; overflow: hidden;">
+    <div class="book-detail-container">
+      <div class="book-detail-header">
+        <button class="book-detail-back-btn" onclick="switchToBooksPage()">
+          <i class="nav-icon" id="iconDetailBack"></i>
+          <span>返回</span>
+        </button>
+        <h2 class="book-detail-title" id="bookDetailTitle">书籍详情</h2>
+        <div class="book-detail-actions">
+          <button class="book-detail-read-btn" id="bookDetailReadBtn" onclick="openBookFromDetail()">
+            <i class="nav-icon" id="iconDetailRead"></i>
+            <span>阅读</span>
+          </button>
+        </div>
+      </div>
+      <div class="book-detail-tabs">
+        <div class="book-detail-tab active" data-tab="intro" onclick="switchDetailTab('intro')">介绍</div>
+        <div class="book-detail-tab" data-tab="stats" onclick="switchDetailTab('stats')">统计</div>
+      </div>
+      <div class="book-detail-content">
+        <div class="book-detail-tab-content active" id="detailTabIntro">
+          <div class="book-detail-section">
+            <h3 class="book-detail-section-title">基本信息</h3>
+            <div class="book-info-grid" id="bookInfoGrid">
+              <!-- 书籍信息将动态生成 -->
+            </div>
+          </div>
+          
+          <div class="book-detail-section">
+            <h3 class="book-detail-section-title">目录</h3>
+            <div class="book-directory-container" id="bookDirectoryContainer">
+              <!-- 目录将动态生成 -->
+            </div>
+          </div>
+        </div>
+        
+        <div class="book-detail-tab-content" id="detailTabStats">
+          <div class="book-detail-section">
+            <h3 class="book-detail-section-title">阅读统计</h3>
+            <div class="book-stats-container" id="bookStatsContainer">
+              <!-- 统计信息将动态生成 -->
+            </div>
+          </div>
+          
+          <div class="book-detail-section">
+            <h3 class="book-detail-section-title">阅读记录</h3>
+            <div class="book-reading-history" id="bookReadingHistory">
+              <!-- 阅读记录将动态生成 -->
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -63,14 +192,26 @@
     <div class="top-nav">
       <div class="nav-row">
         <div class="nav-col" onclick="toggleDirectory()">
-          <div class="nav-btn" id="navDirectory">目录</div>
+          <div class="nav-btn" id="navDirectory" title="目录">
+            <i class="nav-icon" id="iconDirectory"></i>
+            <span class="nav-text">目录</span>
+          </div>
         </div>
         <div class="nav-center">
-          <div class="nav-btn nav-center-item active" id="navReading" data-mode="reading" onclick="switchToReading()">阅读</div>
-          <div class="nav-btn nav-center-item" id="navSearch" data-mode="search" onclick="toggleSearchPage()">搜索</div>
+          <div class="nav-btn nav-center-item active" id="navReading" data-mode="reading" onclick="switchToReading()" title="阅读">
+            <i class="nav-icon" id="iconReading"></i>
+            <span class="nav-text">阅读</span>
+          </div>
+          <div class="nav-btn nav-center-item" id="navSearch" data-mode="search" onclick="toggleSearchPage()" title="搜索">
+            <i class="nav-icon" id="iconSearch"></i>
+            <span class="nav-text">搜索</span>
+          </div>
         </div>
         <div class="nav-col" onclick="toggleMore()">
-          <div class="nav-btn inactive" id="navMore">更多</div>
+          <div class="nav-btn inactive" id="navMore" title="更多">
+            <i class="nav-icon" id="iconMore"></i>
+            <span class="nav-text">更多</span>
+          </div>
         </div>
       </div>
     </div>
@@ -83,7 +224,9 @@
           <div class="book-title-row">
             <span class="book-title" id="bookTitle" style="font-weight: 700;"></span>
             <span id="currentFileName" style="margin-left: 8px; color: var(--secondary-text-color); font-size: 13px;"></span>
-            <button class="book-reupload" onclick="switchToBooksPage()">返回</button>
+            <button class="book-reupload" onclick="switchToBooksPage()" title="返回">
+              <i class="nav-icon" id="iconBack"></i>
+            </button>
         </div>
       </div>
         <div class="progress-section">
@@ -96,7 +239,10 @@
         <div class="progress-tooltip" id="progressTooltip">50%</div>
       </div>
           <!-- 回到当前章节按钮 - 移动到阅读进度卡片下方 -->
-          <button id="backToCurrentBtn" class="back-to-current-btn">回到当前章节</button>
+          <button id="backToCurrentBtn" class="back-to-current-btn">
+            <i class="nav-icon" id="iconBackToChapter"></i>
+            <span>回到当前章节</span>
+          </button>
         </div>
         <div class="directory-list" id="directoryList">
           <!-- 目录内容将通过JS动态生成 -->
@@ -110,12 +256,18 @@
         </div>
         <div class="chapter-footer">
           <div class="footer-content footer-flex">
-            <div class="footer-col nav-btn" onclick="goPrev()">上一章</div>
+            <div class="footer-col nav-btn" onclick="goPrev()" title="上一章">
+              <i class="nav-icon" id="iconPrev"></i>
+              <span class="nav-text">上一章</span>
+            </div>
             <div class="footer-col footer-center" id="chapterCounter">
               <input id="chapterJumpInput" type="number" min="0" class="chapter-jump-input" />
               <button id="chapterJumpBtn" class="chapter-jump-go">GO</button>
             </div>
-            <div class="footer-col nav-btn" onclick="goNext()">下一章</div>
+            <div class="footer-col nav-btn" onclick="goNext()" title="下一章">
+              <i class="nav-icon" id="iconNext"></i>
+              <span class="nav-text">下一章</span>
+            </div>
           </div>
         </div>
       </div>
