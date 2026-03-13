@@ -1,4 +1,14 @@
-// 全局变量定义
+// 安全的JSON解析函数
+    function safeJSONParse(str, defaultValue) {
+      try {
+        return JSON.parse(str);
+      } catch (e) {
+        console.warn('JSON解析失败，使用默认值:', e);
+        return defaultValue;
+      }
+    }
+    
+    // 全局变量定义
     let loadedChapters = []; // 用于跟踪已加载的章节索引
     
     // 初始化
@@ -295,14 +305,14 @@
       accentColor: '#0c8ce9', // 功能色（主题色）
       
       // 高亮设置
-      isDialogHighlightEnabled: true, // 对话高亮开关
-      dialogHighlightColor: '#fff1c2', // 对话高亮背景色（统一默认黄色）
+      isDialogHighlightEnabled: false, // 对话高亮开关，默认关闭
+      dialogHighlightColor: '#999999', // 对话高亮背景色，默认灰色
       dialogHighlightType: 'underline', // 对话高亮类型（'background'或'underline'）
       dialogHighlightFontColor: 'yellow', // 对话高亮字体颜色，默认与背景色相同
       dialogPrefix: '“', // 对话前符号
       dialogSuffix: '”', // 对话后符号
 
-      isNameHighlightEnabled: true, // 人名高亮开关状态，默认开启
+      isNameHighlightEnabled: false, // 人名高亮开关状态，默认关闭
       
       // 搜索模式设置
       isInSearchMode: false, // 是否处于搜索模式
@@ -378,7 +388,6 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
     // DOM元素
     const appContainer = document.getElementById('appContainer');
     const fileInput = document.getElementById('fileInput');
-    const batchFileInput = document.getElementById('batchFileInput');
     const sidebarLeft = document.getElementById('sidebarLeft');
     const sidebarRight = document.getElementById('sidebarRight');
     const navDirectory = document.getElementById('navDirectory');
@@ -821,6 +830,11 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
               // 保存到IndexedDB
               await saveFileToIndexedDB(fileId, text);
               
+              // 解析文件内容获取准确章节数
+              const vols = parseText(text);
+              const flatChapters = flatten(vols);
+              const accurateChapterCount = flatChapters.length;
+              
               // 添加到最近文件列表
               const fileInfo = {
                 id: fileId,
@@ -828,8 +842,9 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
                 size: file.size,
                 lastModified: file.lastModified,
                 lastRead: new Date().getTime(),
-                chapterCount: chapterCount,
-                title: title
+                chapterCount: accurateChapterCount,
+                title: title,
+                encoding: encoding
               };
               
               // 添加到列表开头
@@ -1071,12 +1086,12 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         try {
           const data = JSON.parse(progressData);
           currentIndex = data.currentIndex || 0;
-          currentTheme = data.currentTheme || 'light';
+          currentTheme = (data.currentTheme === 'sepia') ? 'light' : (data.currentTheme || 'light');
           
           // 将所有设置更新到renderVariables对象
           window.renderVariables = {
             ...window.renderVariables,
-            currentTheme: data.currentTheme || 'light',
+            currentTheme: (data.currentTheme === 'sepia') ? 'light' : (data.currentTheme || 'light'),
             fontSize: data.fontSize || 18,
             lineHeight: data.lineHeight || 1.6,
             // 确保段落间距有合理的默认值和范围限制
@@ -1141,12 +1156,29 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
     // 切换到书籍页面
     function switchToBooksPage() {
       const booksPage = document.getElementById('booksPage');
-      const appContainer = document.getElementById('appContainer');
+      const importCheckPage = document.getElementById('importCheckPage');
+      const bookDetailPage = document.getElementById('bookDetailPage');
       
-      if (booksPage && appContainer) {
+      // 关闭所有侧边栏（使用全局变量）
+      if (sidebarLeft) {
+        sidebarLeft.classList.remove('show', 'fullscreen');
+      }
+      if (sidebarRight) {
+        sidebarRight.classList.remove('show', 'fullscreen');
+      }
+      
+      // 清理导入状态
+      currentImportingBook = null;
+      currentDetailBook = null;
+      
+      // 隐藏所有其他页面
+      if (importCheckPage) importCheckPage.style.display = 'none';
+      if (bookDetailPage) bookDetailPage.style.display = 'none';
+      if (appContainer) appContainer.style.display = 'none';
+      
+      // 显示书架页面
+      if (booksPage) {
         booksPage.style.display = 'flex';
-        appContainer.style.display = 'none';
-        
         loadBooksPage();
       } else {
         console.warn('Required page elements not found, cannot switch to books page.');
@@ -1163,6 +1195,12 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       // 设置当前文件信息
       currentFileId = fileId;
       currentFileName = fileName;
+      
+      // 初始化统计数据（如果不存在）
+      initBookStatistics(fileId);
+      
+      // 记录访问
+      recordBookAccess(fileId);
       
       // 显示当前文件名（不包含后缀）
       const fileNameElement = document.getElementById('currentFileName');
@@ -1227,6 +1265,19 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
             document.getElementById('booksPage').style.display = 'none';
             appContainer.style.display = 'flex';
             
+            // 关闭所有侧边栏并恢复内容显示
+            if (sidebarLeft) {
+              sidebarLeft.classList.remove('show', 'fullscreen');
+            }
+            if (sidebarRight) {
+              sidebarRight.classList.remove('show', 'fullscreen');
+            }
+            // 移除移动端隐藏类
+            const readingArea = document.querySelector('.reading-area');
+            const searchContainer = document.querySelector('.search-main-container');
+            if (readingArea) readingArea.classList.remove('hide-mobile');
+            if (searchContainer) searchContainer.classList.remove('hide-mobile');
+            
             // 强制应用当前的渲染变量
             updateLocalRenderVariables();
             applyCurrentFontSettings();
@@ -1240,6 +1291,9 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
             updateChapterJumpUI();
             showBookTitle(fileName);
             
+            // 默认隐藏导航和底部翻页
+            if (window.hideNav) window.hideNav();
+            
             // 显示加载成功提示，包含加载方式
             showToast('成功加载缓存文件(' + loadMethod + ')：' + fileName, 'success');
             
@@ -1249,6 +1303,8 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
               chapterContent = enhanceAutoPaging();
               // 再次确保应用字体设置
               applyCurrentFontSettings();
+              // 重新绑定章节内容点击事件（因为enhanceAutoPaging会克隆元素）
+              if (window.bindChapterContentClick) window.bindChapterContentClick();
             }, 100);
             
             return;
@@ -1336,7 +1392,6 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         addBookCard.className = 'book-card add-book-card';
         addBookCard.innerHTML = `
           <div class="add-book-content">
-            <div class="add-book-icon">📚</div>
             <div class="add-book-text">添加书籍</div>
             <div class="add-book-subtext">点击或拖拽文件到此处</div>
           </div>
@@ -1516,7 +1571,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         }
       }
       
-      // 设置卡片内容
+      // 设置卡片内容 - 添加详情按钮
       card.innerHTML = `
         <div class="book-card-header">
           ${escapeHTML(displayName)}
@@ -1530,51 +1585,50 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
           </div>
         </div>
         <div class="book-last-read">${formattedDate}</div>
+        <div class="book-card-actions">
+          <button class="book-detail-btn" onclick="event.stopPropagation(); switchToBookDetailPage(${JSON.stringify(fileInfo).replace(/"/g, '&quot;')})">详情</button>
+          <button class="book-read-btn" onclick="event.stopPropagation(); openBookDirectly('${fileInfo.id}', '${fileInfo.name}')">阅读</button>
+        </div>
       `;
       
-      // 添加点击事件
+      // 添加点击事件 - 默认进入详情页
       card.addEventListener('click', function() {
-        // 如果长按菜单存在，先关闭它
-        const longPressMenu = document.getElementById('longPressMenu');
-        if (longPressMenu) {
-          longPressMenu.remove();
-        }
-        
-        // 隐藏书籍页，显示主阅读器
-        const booksPage = document.getElementById('booksPage');
-        const appContainer = document.getElementById('appContainer');
-        booksPage.style.display = 'none';
-        appContainer.style.display = 'flex';
-        
-        // 直接加载缓存的文件信息，不需要重新选择文件
-        loadCachedFile(fileInfo.id, fileInfo.name);
-      });
-      
-      // 添加长按事件
-      let longPressTimer;
-      
-      // 电脑端右键菜单
-      card.addEventListener('contextmenu', function(e) {
-        e.preventDefault(); // 阻止默认右键菜单
-        showLongPressMenu(e, fileInfo.id);
-      });
-      
-      // 移动端长按
-      card.addEventListener('touchstart', function(e) {
-        longPressTimer = setTimeout(function() {
-          showLongPressMenu(e, fileInfo.id);
-        }, 500);
-      });
-      
-      card.addEventListener('touchend', function() {
-        clearTimeout(longPressTimer);
-      });
-      
-      card.addEventListener('touchmove', function() {
-        clearTimeout(longPressTimer);
+        switchToBookDetailPage(fileInfo);
       });
       
       return card;
+    }
+    
+    // 直接打开书籍阅读
+    function openBookDirectly(fileId, fileName) {
+      // 如果长按菜单存在，先关闭它
+      const longPressMenu = document.getElementById('longPressMenu');
+      if (longPressMenu) {
+        longPressMenu.remove();
+      }
+      
+      // 关闭所有侧边栏并恢复内容显示
+      if (sidebarLeft) {
+        sidebarLeft.classList.remove('show', 'fullscreen');
+      }
+      if (sidebarRight) {
+        sidebarRight.classList.remove('show', 'fullscreen');
+      }
+      // 移除移动端隐藏类
+      const readingArea = document.querySelector('.reading-area');
+      const searchContainer = document.querySelector('.search-main-container');
+      if (readingArea) readingArea.classList.remove('hide-mobile');
+      if (searchContainer) searchContainer.classList.remove('hide-mobile');
+      
+      // 隐藏书籍页，显示主阅读器
+      const booksPage = document.getElementById('booksPage');
+      const bookDetailPage = document.getElementById('bookDetailPage');
+      if (bookDetailPage) bookDetailPage.style.display = 'none';
+      booksPage.style.display = 'none';
+      appContainer.style.display = 'flex';
+      
+      // 直接加载缓存的文件信息，不需要重新选择文件
+      loadCachedFile(fileId, fileName);
     }
     
     // 显示长按菜单
@@ -1754,9 +1808,9 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
           // 高亮设置
         isDialogHighlightEnabled: false,
   
-        dialogHighlightColor: 'yellow', // 'yellow', 'blue', 'red', 'gray'
+        dialogHighlightColor: '#999999', // 默认灰色
         dialogHighlightType: 'background', // 对话高亮类型（'background'或'underline'）
-          isNameHighlightEnabled: true,
+          isNameHighlightEnabled: false,
           
           // 搜索模式设置
           isInSearchMode: false,
@@ -1945,6 +1999,19 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
             isNameHighlightEnabled = false;
           }
           
+          // 关闭所有侧边栏并恢复内容显示
+          if (sidebarLeft) {
+            sidebarLeft.classList.remove('show', 'fullscreen');
+          }
+          if (sidebarRight) {
+            sidebarRight.classList.remove('show', 'fullscreen');
+          }
+          // 移除移动端隐藏类
+          const readingArea = document.querySelector('.reading-area');
+          const searchContainer = document.querySelector('.search-main-container');
+          if (readingArea) readingArea.classList.remove('hide-mobile');
+          if (searchContainer) searchContainer.classList.remove('hide-mobile');
+          
           // 切换界面 - 明确设置样式
           appContainer.style.display = 'flex';
           document.getElementById('booksPage').style.display = 'none';
@@ -1957,6 +2024,9 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
           updateChapterJumpUI(); // 文件加载后初始化输入框
           showBookTitle(file.name); // 文件加载后显示文件名
           
+          // 默认隐藏导航和底部翻页
+          if (window.hideNav) window.hideNav();
+          
           // 显示解析结果统计
           showToast(`成功解析：共${volData.length}卷，${flatChapters.length}章`, 'success');
           
@@ -1966,6 +2036,8 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
             // 在内容渲染后再应用自动翻页优化
             // 使用返回值确保全局变量被正确更新
             chapterContent = enhanceAutoPaging();
+            // 重新绑定章节内容点击事件（因为enhanceAutoPaging会克隆元素）
+            if (window.bindChapterContentClick) window.bindChapterContentClick();
           }, 100);
           
           // 保存文件信息，包括章节数
@@ -1985,6 +2057,19 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
             flatChapters = flatten(volData);
             currentIndex = 0;
             
+            // 关闭所有侧边栏并恢复内容显示
+            if (sidebarLeft) {
+              sidebarLeft.classList.remove('show', 'fullscreen');
+            }
+            if (sidebarRight) {
+              sidebarRight.classList.remove('show', 'fullscreen');
+            }
+            // 移除移动端隐藏类
+            const readingArea = document.querySelector('.reading-area');
+            const searchContainer = document.querySelector('.search-main-container');
+            if (readingArea) readingArea.classList.remove('hide-mobile');
+            if (searchContainer) searchContainer.classList.remove('hide-mobile');
+            
             // 显示阅读器 - 明确设置样式
             appContainer.style.display = 'flex';
             document.getElementById('booksPage').style.display = 'none';
@@ -1997,6 +2082,9 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
             updateProgress();
             updateChapterJumpUI();
             showBookTitle(file.name);
+            
+            // 默认隐藏导航和底部翻页
+            if (window.hideNav) window.hideNav();
           } catch (fallbackError) {
             console.error('回退处理失败:', fallbackError);
           }
@@ -2047,30 +2135,28 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         /第[ ]*([0-9]+)[ ]*集/,
       ];
       
-      // 移除严格的行首限制，增加更多章节标题模式，参考V0.3.11版本
+      // 严格的章节标题匹配，避免误识别正文中的内容
       const chapterPatterns = [
-        // 移除行首限制，增加更多格式支持
-        /[第]\s*([零一二三四五六七八九十百千万亿两]+)\s*[章节回][\s：:。]/,
-        /[第]\s*([0-9]+)\s*[章节回][\s：:。]/,
-        /第[ ]*([0-9]+)[ ]*章[\s：:。]/,
-        /第[ ]*([0-9]+)[ ]*节[\s：:。]/,
-        /第[ ]*([0-9]+)[ ]*回[\s：:。]/,
-        // 阿拉伯数字+回/章格式，不要求严格行首
-        /([0-9]+)[章回][\s：:。]/,
-        // 符号格式，不要求严格行首
-        /【([0-9]+)】[\s：:。]/,
-        /【([一二三四五六七八九十百千万亿两]+)】[\s：:。]/,
-        /「([0-9]+)」[\s：:。]/,
-        /「([一二三四五六七八九十百千万亿两]+)」[\s：:。]/,
-        /（([0-9]+)）[\s：:。]/,
-        /（([一二三四五六七八九十百千万亿两]+)）[\s：:。]/,
-        /\[([0-9]+)\][\s：:。]/,
-        /\[([一二三四五六七八九十百千万亿两]+)\][\s：:。]/,
-        /\{([0-9]+)\}[\s：:。]/,
-        /\{([一二三四五六七八九十百千万亿两]+)\}[\s：:。]/,
-        // 增加更多常见章节格式
-        /[第]\s*([零一二三四五六七八九十百千万亿两]+)\s*[章节回]/,
-        /[第]\s*([0-9]+)\s*[章节回]/,
+        // 要求行首匹配，避免误识别正文中的内容
+        /^[第]\s*([零一二三四五六七八九十百千万亿两]+)\s*[章节回][\s：:。]/,
+        /^[第]\s*([0-9]+)\s*[章节回][\s：:。]/,
+        /^第[ ]*([0-9]+)[ ]*章[\s：:。]/,
+        /^第[ ]*([0-9]+)[ ]*节[\s：:。]/,
+        /^第[ ]*([0-9]+)[ ]*回[\s：:。]/,
+        // 阿拉伯数字+回/章格式，要求行首匹配
+        /^[0-9]+[章回][\s：:。]/,
+        // 符号格式，要求行首匹配
+        /^【([0-9]+)】[\s：:。]?$/,
+        /^【([一二三四五六七八九十百千万亿两]+)】[\s：:。]?$/,
+        /^「([0-9]+)」[\s：:。]?$/,
+        /^「([一二三四五六七八九十百千万亿两]+)」[\s：:。]?$/,
+        /^（([0-9]+)）[\s：:。]?$/,
+        /^（([一二三四五六七八九十百千万亿两]+)）[\s：:。]?$/,
+        /^\[([0-9]+)\][\s：:。]?$/,
+        /^\[([一二三四五六七八九十百千万亿两]+)\][\s：:。]?$/,
+        /^\{([0-9]+)\}[\s：:。]?$/,
+        /^\{([一二三四五六七八九十百千万亿两]+)\}[\s：:。]?$/,
+        // 增加更多常见章节格式，要求行首匹配
         /^[第]\s*([零一二三四五六七八九十百千万亿两]+)\s*[章节回]/,
         /^[第]\s*([0-9]+)\s*[章节回]/
       ];
@@ -3317,7 +3403,14 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         
         // 优先检查左右翻页设置，如果开启则显示分页区
         // 否则根据自动翻页设置决定：自动翻页开启时隐藏，关闭时显示
-        chapterFooter.style.display = isTraditionalPageTurningEnabled || !isSeamlessScrollingEnabled ? 'block' : 'none';
+        // 注意：这里只控制是否应该存在分页区，不覆盖hidden类的显示/隐藏逻辑
+        // 使用CSS类来控制，避免直接设置style.display覆盖hidden类
+        const shouldShowFooter = isTraditionalPageTurningEnabled || !isSeamlessScrollingEnabled;
+        if (!shouldShowFooter) {
+          chapterFooter.classList.add('footer-disabled');
+        } else {
+          chapterFooter.classList.remove('footer-disabled');
+        }
       }
       
       // 延迟重置章节切换标志，确保渲染完成
@@ -3450,12 +3543,28 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
     
     // 渲染功能设置tab
     function renderSettingsTab() {
+      // 定义SVG图标
+      const icons = {
+        person: createSvgIcon('M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z', 'currentColor', 'none', 0),
+        dialog: createSvgIcon('M20 2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14l4 4V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z', 'currentColor', 'none', 0),
+        scroll: createSvgIcon('M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14z', 'currentColor', 'none', 0),
+        page: createSvgIcon('M6 2C4.9 2 4 2.9 4 4v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6H6zm7 7V3.5L18.5 9H13z', 'currentColor', 'none', 0),
+        period: createSvgIcon('M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z', 'currentColor', 'none', 0),
+        fontSize: createSvgIcon('M9.93 13.5h4.14L12 7.98zM20 2H4c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-4.05 16.5l-1.14-3H9.17l-1.12 3H5.96l5.11-13h1.86l5.11 13h-2.09z', 'currentColor', 'none', 0),
+        fontWeight: createSvgIcon('M3 17h18v2H3v-2zm0-7h18v5H3v-5zm0-4h18v2H3V6z', 'currentColor', 'none', 0),
+        lineHeight: createSvgIcon('M3 5h18v2H3V5zm0 8h18v2H3v-2zm0 4h12v2H3v-2zm0-8h12v2H3V9z', 'currentColor', 'none', 0),
+        paragraph: createSvgIcon('M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z', 'currentColor', 'none', 0),
+        margin: createSvgIcon('M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14z', 'currentColor', 'none', 0),
+        theme: createSvgIcon('M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z', 'currentColor', 'none', 0),
+        sync: createSvgIcon('M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z', 'currentColor', 'none', 0)
+      };
+      
       functionContent.innerHTML = `
         <div class="volume-title">功能</div>
         
         <div class="function-item" onclick="openNameDialog()">
           <div class="function-info">
-            <div class="function-title">👤 人名高亮</div>
+            <div class="function-title"><i class="function-icon">${icons.person}</i>人名高亮</div>
             <div class="function-desc">自定义关键词高亮</div>
           </div>
           <div class="toggle-switch ${window.renderVariables.isNameHighlightEnabled ? '' : 'off'}" onclick="(function(e) { e.stopPropagation(); toggleNameHighlightMaster(); })(event)">
@@ -3464,7 +3573,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         </div>
         <div class="function-item" onclick="openDialogHighlightDialog()">
           <div class="function-info">
-            <div class="function-title">💬 对话高亮</div>
+            <div class="function-title"><i class="function-icon">${icons.dialog}</i>对话高亮</div>
             <div class="function-desc">高亮引号内的对话内容</div>
           </div>
           <div class="toggle-switch ${window.renderVariables.isDialogHighlightEnabled ? '' : 'off'}" onclick="(function(e) { e.stopPropagation(); toggleDialogHighlight(); })(event)">
@@ -3474,7 +3583,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         
         <div class="function-item">
           <div class="function-info">
-            <div class="function-title">${window.renderVariables.isSeamlessScrollingEnabled ? '📜 滚动翻页' : '📖 默认翻页'}</div>
+            <div class="function-title"><i class="function-icon">${window.renderVariables.isSeamlessScrollingEnabled ? icons.scroll : icons.page}</i>${window.renderVariables.isSeamlessScrollingEnabled ? '滚动翻页' : '默认翻页'}</div>
             <div class="function-desc">滚动底部自动加载页面（可双击切换）</div>
           </div>
           <div class="toggle-switch ${window.renderVariables.isSeamlessScrollingEnabled ? '' : 'off'}" onclick="(function(e) { e.stopPropagation(); toggleScrollingMode(); })(event)">
@@ -3484,7 +3593,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         
         <div class="function-item">
           <div class="function-info">
-            <div class="function-title">📝 句号换行</div>
+            <div class="function-title"><i class="function-icon">${icons.period}</i>句号换行</div>
             <div class="function-desc">有句号的地方自动换段落行</div>
           </div>
           <div class="toggle-switch ${window.renderVariables.isPeriodLineBreakEnabled ? '' : 'off'}" onclick="(function(e) { e.stopPropagation(); togglePeriodLineBreak(); })(event)">
@@ -3498,35 +3607,35 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         
         <div class="function-item" onclick="openFontSizeDialog()">
           <div class="function-info">
-            <div class="function-title">🔤 正文字号</div>
+            <div class="function-title"><i class="function-icon">${icons.fontSize}</i>正文字号</div>
             <div class="function-desc">调整阅读字体大小</div>
           </div>
           <span class="function-arrow">&#8250;</span>
         </div>
         <div class="function-item" onclick="openFontWeightDialog()">
           <div class="function-info">
-            <div class="function-title">📏 字体字重</div>
+            <div class="function-title"><i class="function-icon">${icons.fontWeight}</i>字体字重</div>
             <div class="function-desc">调整阅读字体粗细</div>
           </div>
           <span class="function-arrow">&#8250;</span>
         </div>
         <div class="function-item" onclick="openLineHeightDialog()">
           <div class="function-info">
-            <div class="function-title">📐 行间距</div>
+            <div class="function-title"><i class="function-icon">${icons.lineHeight}</i>行间距</div>
             <div class="function-desc">调整段落行距</div>
           </div>
           <span class="function-arrow">&#8250;</span>
         </div>
         <div class="function-item" onclick="openParagraphSpacingDialog()">
           <div class="function-info">
-            <div class="function-title">📑 段落间距</div>
+            <div class="function-title"><i class="function-icon">${icons.paragraph}</i>段落间距</div>
             <div class="function-desc">调整段落之间的间距</div>
           </div>
           <span class="function-arrow">&#8250;</span>
         </div>
         <div class="function-item" onclick="openMarginSettingsDialog()">
           <div class="function-info">
-            <div class="function-title">📃 页边距设置</div>
+            <div class="function-title"><i class="function-icon">${icons.margin}</i>页边距设置</div>
             <div class="function-desc">调整阅读区域两侧的间距</div>
           </div>
           <span class="function-arrow">&#8250;</span>
@@ -3537,7 +3646,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         
         <div class="function-item" onclick="openThemeDialog()">
           <div class="function-info">
-            <div class="function-title">🎨 主题设置</div>
+            <div class="function-title"><i class="function-icon">${icons.theme}</i>主题设置</div>
             <div class="function-desc">自定义界面主题和颜色</div>
           </div>
           <span class="function-arrow">&#8250;</span>
@@ -3545,7 +3654,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         
         <div class="function-item" onclick="openImportExportSettings()">
           <div class="function-info">
-            <div class="function-title">🔄 书籍数据同步</div>
+            <div class="function-title"><i class="function-icon">${icons.sync}</i>书籍数据同步</div>
             <div class="function-desc">不同设备 相同书籍 进度同步</div>
           </div>
           <span class="function-arrow">&#8250;</span>
@@ -3570,59 +3679,60 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
     
     // 渲染笔记管理tab
     function renderNotesTab() {
+      // 定义笔记页图标
+      const noteIcons = {
+        add: createSvgIcon('M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z', 'white', 'none', 0)
+      };
+      
       functionContent.innerHTML = `
         <div class="notes-header" style="display: flex; flex-direction: column; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border-color);">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <div class="notes-status" style="font-size: 13px; color: var(--secondary-text-color);">我的笔记: <span id="notesProgress">0/0</span></div>
             <div style="display: flex; gap: 8px;">
-              <button class="notes-import-btn" onclick="importNotes()" style="
+              <button class="notes-import-btn" onclick="importNotes()" title="粘贴板导入" style="
                 display: flex;
                 align-items: center;
                 justify-content: center;
                 height: 32px;
-                padding: 0 8px;
+                padding: 0 12px;
                 background: transparent;
                 border: 1px solid var(--border-color);
                 border-radius: 4px;
-                color: var(--secondary-text-color);
                 cursor: pointer;
                 font-size: 12px;
+                color: var(--secondary-text-color);
                 transition: all 0.2s;
-              ">
-                导入
-              </button>
-              <button class="notes-export-btn" onclick="exportNotes()" style="
+              ">导入</button>
+              <button class="notes-export-btn" onclick="exportNotes()" title="复制到粘贴板" style="
                 display: flex;
                 align-items: center;
                 justify-content: center;
                 height: 32px;
-                padding: 0 8px;
+                padding: 0 12px;
                 background: transparent;
                 border: 1px solid var(--border-color);
                 border-radius: 4px;
-                color: var(--secondary-text-color);
                 cursor: pointer;
                 font-size: 12px;
+                color: var(--secondary-text-color);
                 transition: all 0.2s;
-              ">
-                复制
-              </button>
-              <button class="notes-add-btn" onclick="addNewNote()" style="
+              ">复制</button>
+              <button class="notes-add-btn" onclick="addNewNote()" title="新增笔记" style="
                 display: flex;
                 align-items: center;
                 justify-content: center;
                 width: 32px;
                 height: 32px;
                 padding: 0;
-                background: transparent;
-                border: 1px solid var(--border-color);
-                border-radius: 4px;
-                color: var(--secondary-text-color);
+                background: var(--accent-color);
+                border: none;
+                border-radius: 50%;
                 cursor: pointer;
-                font-size: 16px;
                 transition: all 0.2s;
               ">
-                +
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="white">
+                  <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                </svg>
               </button>
             </div>
           </div>
@@ -4738,10 +4848,14 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       
       renderFunctionContent();
       
-      // 显示/隐藏分页区
+      // 显示/隐藏分页区 - 使用CSS类控制，避免覆盖hidden类
       const chapterFooter = document.querySelector('.chapter-footer');
       if (chapterFooter) {
-        chapterFooter.style.display = isSeamlessScrollingEnabled ? 'none' : 'block';
+        if (isSeamlessScrollingEnabled) {
+          chapterFooter.classList.add('footer-disabled');
+        } else {
+          chapterFooter.classList.remove('footer-disabled');
+        }
       }
       
       showToast(`自动上下翻页已${isSeamlessScrollingEnabled ? '启用' : '关闭'}`);
@@ -4784,7 +4898,11 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       // 显示/隐藏分页区
       const chapterFooter = document.querySelector('.chapter-footer');
       if (chapterFooter) {
-        chapterFooter.style.display = isSeamlessScrollingEnabled ? 'none' : 'block';
+        if (isSeamlessScrollingEnabled) {
+          chapterFooter.classList.add('footer-disabled');
+        } else {
+          chapterFooter.classList.remove('footer-disabled');
+        }
       }
       
       showToast(`已切换为${isSeamlessScrollingEnabled ? '自动上下翻页' : '左右翻页'}模式`);
@@ -4827,7 +4945,11 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       // 显示/隐藏分页区
       const chapterFooter = document.querySelector('.chapter-footer');
       if (chapterFooter) {
-        chapterFooter.style.display = isTraditionalPageTurningEnabled ? 'block' : 'none';
+        if (isTraditionalPageTurningEnabled) {
+          chapterFooter.classList.remove('footer-disabled');
+        } else {
+          chapterFooter.classList.add('footer-disabled');
+        }
       }
       
       showToast(`左右翻页已${isTraditionalPageTurningEnabled ? '启用' : '关闭'}`);
@@ -4890,8 +5012,8 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
           
           // 高亮设置
           isDialogHighlightEnabled: false,
-          dialogHighlightColor: '#fff1c2',
-          isNameHighlightEnabled: true,
+          dialogHighlightColor: '#999999',
+          isNameHighlightEnabled: false,
           
           // 搜索模式设置
           isInSearchMode: false,
@@ -7887,6 +8009,12 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         window.renderVariables.isFollowSystemTheme = true;
       }
       
+      // 确保当前主题不是sepia，如果是则回退到light
+      if (currentTheme === 'sepia') {
+        currentTheme = 'light';
+        window.renderVariables.currentTheme = 'light';
+      }
+      
       const content = `
         <div class="theme-preview">
           <h3>当前主题预览</h3>
@@ -7901,10 +8029,6 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
           <div class="theme-option ${!window.renderVariables.isFollowSystemTheme && currentTheme === 'dark' ? 'active' : ''}" onclick="selectTheme('dark')">
             <div class="theme-option-icon">🌙</div>
             <div class="theme-option-name">深色主题</div>
-          </div>
-          <div class="theme-option ${!window.renderVariables.isFollowSystemTheme && currentTheme === 'sepia' ? 'active' : ''}" onclick="selectTheme('sepia')">
-            <div class="theme-option-icon">📖</div>
-            <div class="theme-option-name">护眼模式</div>
           </div>
         </div>
         
@@ -7989,11 +8113,6 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
           window.renderVariables.textColor = '#ffffff';
           window.renderVariables.backgroundColor = '#000000';
           window.renderVariables.accentColor = '#4a9eff';
-          break;
-        case 'sepia':
-          window.renderVariables.textColor = '#5c4b37';
-          window.renderVariables.backgroundColor = '#f4ecd8';
-          window.renderVariables.accentColor = '#8b6f47';
           break;
       }
       
@@ -8412,10 +8531,98 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       // 暴露性能监控到全局
       window.performanceMonitor = performanceMonitor;
       
+      // 导航和底部翻页点击弹出/关闭功能
+      let isNavVisible = false; // 默认隐藏
+      let navToggleTimeout = null;
+      
+      function toggleNavVisibility() {
+        const topNav = document.querySelector('.top-nav');
+        const chapterFooter = document.querySelector('.chapter-footer');
+        
+        if (!topNav || !chapterFooter) return;
+        
+        isNavVisible = !isNavVisible;
+        
+        if (isNavVisible) {
+          topNav.classList.remove('hidden');
+          chapterFooter.classList.remove('hidden');
+        } else {
+          topNav.classList.add('hidden');
+          chapterFooter.classList.add('hidden');
+        }
+      }
+      
+      function showNav() {
+        const topNav = document.querySelector('.top-nav');
+        const chapterFooter = document.querySelector('.chapter-footer');
+        
+        if (!topNav || !chapterFooter) return;
+        
+        isNavVisible = true;
+        topNav.classList.remove('hidden');
+        chapterFooter.classList.remove('hidden');
+      }
+      
+      function hideNav() {
+        const topNav = document.querySelector('.top-nav');
+        const chapterFooter = document.querySelector('.chapter-footer');
+        
+        if (!topNav || !chapterFooter) return;
+        
+        isNavVisible = false;
+        topNav.classList.add('hidden');
+        chapterFooter.classList.add('hidden');
+      }
+      
+      // 绑定章节内容点击事件的函数（可重复调用）
+      function bindChapterContentClick() {
+        const chapterContentEl = document.getElementById('chapterContent');
+        if (chapterContentEl) {
+          // 移除可能存在的旧监听器（通过克隆方式）
+          chapterContentEl.removeEventListener('click', handleChapterContentClick);
+          // 添加新的监听器
+          chapterContentEl.addEventListener('click', handleChapterContentClick);
+        }
+      }
+      
+      // 章节内容点击处理函数
+      function handleChapterContentClick(e) {
+        // 排除文本选择和链接点击
+        const selection = window.getSelection();
+        if (selection && selection.toString().length > 0) return;
+        
+        // 排除点击笔记相关元素
+        if (e.target.closest('.note-highlight') || e.target.closest('.note-popup')) return;
+        
+        toggleNavVisibility();
+      }
+      
+      // 暴露绑定函数到全局，以便在其他地方调用
+      window.bindChapterContentClick = bindChapterContentClick;
+      
       // 初始化UI元素（延迟执行，确保DOM完全加载）
       setTimeout(() => {
         initializeUIElements();
+        // 默认隐藏导航和底部翻页
+        hideNav();
+        
+        // 点击章节内容区域切换导航显示
+        bindChapterContentClick();
+        
+        // 点击导航栏或底部翻页时保持显示
+        document.querySelector('.top-nav')?.addEventListener('click', function(e) {
+          showNav();
+        });
+        
+        document.querySelector('.chapter-footer')?.addEventListener('click', function(e) {
+          showNav();
+        });
       }, 100);
+      
+      // 暴露全局函数
+      window.toggleNavVisibility = toggleNavVisibility;
+      window.showNav = showNav;
+      window.hideNav = hideNav;
       
       // 使用事件委托优化事件监听
       document.addEventListener('click', function(e) {
@@ -8453,7 +8660,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       // 检测分页区是否被隐藏
       function isChapterFooterHidden() {
         const chapterFooter = document.querySelector('.chapter-footer');
-        return !chapterFooter || chapterFooter.style.display === 'none';
+        return !chapterFooter || chapterFooter.classList.contains('footer-disabled') || chapterFooter.classList.contains('hidden');
       }
       
       // 当前加载的章节缓存，最多保存2个章节
@@ -8840,6 +9047,9 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
     
     // 初始化UI元素的函数
     function initializeUIElements() {
+      // 初始化导航图标
+      initializeNavIcons();
+      
       // 目录栏顶部书名和更换按钮UI优化
       const sidebarHeader = document.querySelector('.sidebar-header');
       const bookReupload = document.querySelector('.book-reupload');
@@ -8878,7 +9088,68 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       
 
     }
-
+    
+    // 初始化导航图标
+    function initializeNavIcons() {
+      // 定义SVG图标路径
+      const iconPaths = {
+        list: 'M4 6h16M4 12h16M4 18h16',
+        book: 'M6 2h12a2 2 0 012 2v16a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2zM6 8h12M6 12h12',
+        search: 'M15 15l6 6M10 17a7 7 0 100-14 7 7 0 000 14z',
+        more: 'M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z',
+        left: 'M15 19l-7-7 7-7',
+        right: 'M9 5l7 7-7 7',
+        back: 'M19 12H5M12 19l-7-7 7-7',
+        backToChapter: 'M12 19V5M5 12l7-7 7 7',
+        manage: 'M3 17v2h6v-2H3zM3 5v2h6V5H3zm10 0v2h8V5h-8zm0 16v-2h8v-2h-8v2zM3 12h18v-2H3v2z',
+        delete: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16',
+        copy: 'M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z',
+        fix: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15',
+        read: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253'
+      };
+      
+      // 设置图标
+      const setIcon = (id, path) => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = createSvgIcon(path, 'none', 'currentColor', 2);
+      };
+      
+      // 导航栏图标
+      setIcon('iconDirectory', iconPaths.list);
+      setIcon('iconReading', iconPaths.book);
+      setIcon('iconSearch', iconPaths.search);
+      setIcon('iconMore', iconPaths.more);
+      
+      // 分页区图标
+      setIcon('iconPrev', iconPaths.left);
+      setIcon('iconNext', iconPaths.right);
+      
+      // 目录页图标
+      setIcon('iconBack', iconPaths.back);
+      setIcon('iconBackToChapter', iconPaths.backToChapter);
+      
+      // 书架页图标
+      setIcon('iconManage', iconPaths.manage);
+      
+      // 导入检查页面图标
+      setIcon('iconImportBack', iconPaths.back);
+      setIcon('iconImportDelete', iconPaths.delete);
+      setIcon('iconCopyFormat', iconPaths.copy);
+      setIcon('iconCopyStructure', iconPaths.list);
+      setIcon('iconFixEncoding', iconPaths.fix);
+      
+      // 书籍详情页面图标
+      setIcon('iconDetailBack', iconPaths.back);
+      setIcon('iconDetailRead', iconPaths.read);
+    }
+    
+    // 创建SVG图标的辅助函数
+    function createSvgIcon(pathD, fill, stroke, strokeWidth) {
+      return `<svg viewBox="0 0 24 24" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round">
+        <path d="${pathD}"/>
+      </svg>`;
+    }
+    
     // 1. 分页输入框和跳转按钮高度一致
     chapterJumpInput.style.height = '32px';
     chapterJumpBtn.style.height = '32px';
@@ -8965,14 +9236,13 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         border-radius: 999px;
         justify-content: center;
         align-items: center;
-        gap: 10px;
         display: flex;
         border: none;
         cursor: pointer;
         transition: background 0.2s;
         margin-left: 8px;
       `;
-      searchBtn.innerHTML = '<div style="color: white; font-size: 12px; font-family: Inter; font-weight: 500;">搜索</div>';
+      searchBtn.innerHTML = `<div style="color: white; font-size: 12px; font-family: Inter; font-weight: 500;">搜索</div>`;
       
       // 重置按钮
       const resetBtn = document.createElement('button');
@@ -8986,14 +9256,13 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         border-radius: 999px;
         justify-content: center;
         align-items: center;
-        gap: 10px;
         display: flex;
         border: 1px solid var(--border-color);
         cursor: pointer;
         transition: background 0.2s;
         margin-left: 8px;
       `;
-              resetBtn.innerHTML = '<div style="color: var(--nav-text); font-size: 12px; font-family: Inter; font-weight: 500;">重置</div>';
+      resetBtn.innerHTML = `<div style="color: var(--nav-text); font-size: 12px; font-family: Inter; font-weight: 500;">重置</div>`;
       
       // 确保搜索按钮事件绑定
       searchBtn.onclick = function(e) {
@@ -10320,7 +10589,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       // 隐藏底部分页
       const chapterFooter = document.querySelector('.chapter-footer');
       if (chapterFooter) {
-        chapterFooter.style.display = 'none';
+        chapterFooter.classList.add('hidden');
       }
       
       // 确保currentSearchKeyword不为空
@@ -10445,7 +10714,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       // 恢复底部分页显示
       const chapterFooter = document.querySelector('.chapter-footer');
       if (chapterFooter) {
-        chapterFooter.style.display = 'flex';
+        chapterFooter.classList.remove('hidden');
       }
       
       // 关闭搜索引导时，只清除显示状态，保留搜索结果数据
@@ -12970,10 +13239,12 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
           
           .file-action-btn.delete {
             background-color: var(--error-color);
+            color: white;
           }
           
           .file-action-btn.delete:hover {
             background-color: var(--error-hover-color);
+            color: white;
           }
           
           /* 存储详情卡片样式 */
@@ -13073,7 +13344,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
           
           .type-recent_files,
           .type-last_file {
-            background-color: rgba(101, 31, 255, 0.1);
+            background-color: rgba(12, 140, 233, 0.1);
             color: var(--accent-color);
           }
           
@@ -13837,6 +14108,9 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
         
         showToast('所有缓存已清空', 'success');
         closeCacheManagementDialog();
+        setTimeout(() => {
+          location.reload();
+        }, 500);
       }
     }
     
@@ -15040,7 +15314,7 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       const activeTab = document.getElementById(activeTabId);
       activeTab.classList.add('active');
       activeTab.style.backgroundColor = 'var(--accent-color)';
-      activeTab.style.color = 'var(--text-color)';
+      activeTab.style.color = 'white';
       
       // 切换笔记显示
       renderNotesList(tab);
@@ -15783,3 +16057,891 @@ isNameHighlightEnabled, isInSearchMode, currentNames, disabledNames, globalNameC
       // 同步局部变量
       updateLocalRenderVariables();
     });
+
+    // ===== 新增：书籍导入检查和书籍详情功能 =====
+    
+    // 全局变量：当前正在导入的书籍信息
+    let currentImportingBook = null;
+    let currentDetailBook = null;
+    
+    // 切换到导入检查页面
+    function switchToImportCheckPage(file) {
+      const booksPage = document.getElementById('booksPage');
+      const importCheckPage = document.getElementById('importCheckPage');
+      const bookDetailPage = document.getElementById('bookDetailPage');
+      
+      // 清理详情状态
+      currentDetailBook = null;
+      
+      // 隐藏所有其他页面
+      if (booksPage) booksPage.style.display = 'none';
+      if (bookDetailPage) bookDetailPage.style.display = 'none';
+      if (appContainer) appContainer.style.display = 'none';
+      
+      // 显示导入检查页面
+      importCheckPage.style.display = 'flex';
+      
+      // 设置页面标题
+      const fileNameWithoutExt = file.name.replace(/\.[^.]+$/, '');
+      document.getElementById('importCheckTitle').textContent = fileNameWithoutExt + '导入';
+      
+      // 初始化图标
+      initializeNavIcons();
+      
+      // 处理文件导入和检查
+      processFileForImportCheck(file);
+    }
+    
+    // 处理文件用于导入检查
+    function processFileForImportCheck(file) {
+      const reader = new FileReader();
+      reader.readAsArrayBuffer(file);
+      
+      reader.onload = async function(e) {
+        try {
+          const buffer = e.target.result;
+          const uint8Array = new Uint8Array(buffer);
+          
+          // 编码检测
+          const sampleSize = Math.min(uint8Array.length, 20000);
+          const sample = uint8Array.subarray(0, sampleSize);
+          let binaryString = "";
+          for (let i = 0; i < sample.length; i++) {
+            binaryString += String.fromCharCode(sample[i]);
+          }
+          
+          const detected = jschardet.detect(binaryString);
+          let encoding = detected.encoding || 'utf-8';
+          
+          if (encoding.toLowerCase() === 'gb2312' || encoding.toLowerCase() === 'ascii') {
+            encoding = 'gb18030';
+          }
+          
+          // 解码文件内容
+          const decoder = new TextDecoder(encoding);
+          const text = decoder.decode(uint8Array);
+          
+          // 保存当前导入书籍信息
+          currentImportingBook = {
+            file: file,
+            name: file.name,
+            size: file.size,
+            lastModified: file.lastModified,
+            encoding: encoding,
+            text: text,
+            fileId: file.name + '_' + file.size + '_' + file.lastModified
+          };
+          
+          // 渲染导入检查页面
+          renderImportCheckPage(currentImportingBook);
+        } catch (error) {
+          console.error('文件处理失败:', error);
+          showToast('文件处理失败: ' + error.message, 'error');
+        }
+      };
+      
+      reader.onerror = function() {
+        showToast('无法读取文件', 'error');
+      };
+    }
+    
+    // 渲染导入检查页面
+    function renderImportCheckPage(bookInfo) {
+      // 渲染书籍信息
+      renderImportInfoGrid(bookInfo);
+      
+      // 渲染编码检查
+      renderEncodingCheck(bookInfo);
+      
+      // 渲染目录检查
+      renderDirectoryCheck(bookInfo);
+      
+      // 渲染目录预览
+      renderImportDirectoryPreview(bookInfo);
+      
+      // 更新确认按钮状态
+      updateImportConfirmButtonState(bookInfo);
+    }
+    
+    // 更新确认导入按钮状态
+    function updateImportConfirmButtonState(bookInfo) {
+      const confirmBtn = document.getElementById('importConfirmBtn');
+      if (!confirmBtn) return;
+      
+      // 检查是否有乱码
+      const hasGarbled = checkForGarbledText(bookInfo.text);
+      
+      // 检查章节数量
+      let vols = [];
+      try {
+        vols = parseText(bookInfo.text);
+      } catch (e) {
+        // 解析失败
+      }
+      
+      let chapterCount = 0;
+      vols.forEach(vol => {
+        chapterCount += vol.chapters.length;
+      });
+      
+      // 判断是否禁用按钮
+      const shouldDisable = hasGarbled || chapterCount === 0;
+      
+      if (shouldDisable) {
+        confirmBtn.disabled = true;
+        confirmBtn.style.opacity = '0.5';
+        confirmBtn.style.cursor = 'not-allowed';
+        confirmBtn.title = '格式异常或编码问题，无法阅读，请先修复';
+      } else {
+        confirmBtn.disabled = false;
+        confirmBtn.style.opacity = '1';
+        confirmBtn.style.cursor = 'pointer';
+        confirmBtn.title = '确认导入并阅读';
+      }
+    }
+    
+    // 渲染导入页面目录预览
+    function renderImportDirectoryPreview(bookInfo) {
+      const container = document.getElementById('importDirectoryContainer');
+      const vols = bookInfo.vols || [];
+      
+      if (vols.length === 0) {
+        container.innerHTML = '<div class="check-detail">暂无目录</div>';
+        return;
+      }
+      
+      let html = '<div class="import-directory-list">';
+      
+      vols.forEach((vol, volIndex) => {
+        if (vols.length > 1) {
+          html += `<div class="volume-title" style="padding: 12px 0; font-weight: 600; color: var(--nav-text);">${vol.volTitle}</div>`;
+        }
+        
+        vol.chapters.forEach((chap, chapIndex) => {
+          html += `<div class="import-directory-item">${chap.title}</div>`;
+        });
+      });
+      
+      html += '</div>';
+      container.innerHTML = html;
+    }
+    
+    // 渲染书籍信息网格
+    function renderImportInfoGrid(bookInfo) {
+      const grid = document.getElementById('importInfoGrid');
+      
+      grid.innerHTML = `
+        <div class="info-item">
+          <div class="info-item-label">文件名</div>
+          <div class="info-item-value">${bookInfo.name}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-item-label">修改时间</div>
+          <div class="info-item-value">${new Date(bookInfo.lastModified).toLocaleString()}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-item-label">检测编码</div>
+          <div class="info-item-value">${bookInfo.encoding}</div>
+        </div>
+      `;
+    }
+    
+    // 渲染编码检查
+    function renderEncodingCheck(bookInfo) {
+      const container = document.getElementById('encodingCheckContainer');
+      const text = bookInfo.text;
+      
+      // 检查是否有乱码特征
+      const hasGarbled = checkForGarbledText(text);
+      let statusClass = 'success';
+      let statusIcon = '✓';
+      let statusText = '编码检测正常';
+      let detailText = `文件使用 ${bookInfo.encoding} 编码，内容解析正常。`;
+      
+      if (hasGarbled) {
+        statusClass = 'warning';
+        statusIcon = '⚠';
+        statusText = '可能存在编码问题';
+        detailText = '检测到可能的乱码字符，建议尝试其他编码或使用修复功能。';
+      }
+      
+      container.innerHTML = `
+        <div class="check-status ${statusClass}">
+          <span class="check-status-icon">${statusIcon}</span>
+          <span>${statusText}</span>
+        </div>
+        <div class="check-detail">${detailText}</div>
+      `;
+    }
+    
+    // 检查乱码
+    function checkForGarbledText(text) {
+      // 简单的乱码检测：检查是否有大量连续的不可打印字符
+      const sample = text.substring(0, 1000);
+      let garbledCount = 0;
+      
+      for (let i = 0; i < sample.length; i++) {
+        const charCode = sample.charCodeAt(i);
+        // 检查是否是控制字符或扩展ASCII中不常见的字符
+        if ((charCode < 32 && charCode !== 9 && charCode !== 10 && charCode !== 13) || 
+            (charCode >= 127 && charCode < 160)) {
+          garbledCount++;
+        }
+      }
+      
+      return garbledCount > sample.length * 0.1;
+    }
+    
+    // 渲染目录检查
+    function renderDirectoryCheck(bookInfo) {
+      const container = document.getElementById('directoryCheckContainer');
+      const text = bookInfo.text;
+      
+      // 解析目录
+      let vols = [];
+      try {
+        vols = parseText(text);
+      } catch (e) {
+        console.error('目录解析失败:', e);
+      }
+      
+      const volCount = vols.length;
+      let chapterCount = 0;
+      vols.forEach(vol => {
+        chapterCount += vol.chapters.length;
+      });
+      
+      let statusClass = 'success';
+      let statusIcon = '✓';
+      let statusText = '目录解析成功';
+      let detailText = `共解析出 ${volCount} 卷，${chapterCount} 章。`;
+      
+      if (chapterCount === 0) {
+        statusClass = 'error';
+        statusIcon = '✗';
+        statusText = '目录解析失败';
+        detailText = '未能识别出任何章节，请检查文件格式。';
+      } else if (chapterCount < 5) {
+        statusClass = 'warning';
+        statusIcon = '⚠';
+        statusText = '章节数量较少';
+        detailText = `仅识别出 ${chapterCount} 章，可能需要手动调整。`;
+      }
+      
+      container.innerHTML = `
+        <div class="check-status ${statusClass}">
+          <span class="check-status-icon">${statusIcon}</span>
+          <span>${statusText}</span>
+        </div>
+        <div class="check-detail">${detailText}</div>
+      `;
+      
+      // 保存解析结果
+      currentImportingBook.vols = vols;
+      currentImportingBook.chapterCount = chapterCount;
+    }
+    
+    // 复制书籍目录结构
+    function copyBookDirectoryStructure() {
+      if (!currentImportingBook) return;
+      
+      let content = '// 书籍信息\n';
+      content += `文件名: ${currentImportingBook.name}\n`;
+      content += `文件大小: ${(currentImportingBook.size / 1024).toFixed(2)} KB\n`;
+      content += `检测编码: ${currentImportingBook.encoding}\n`;
+      
+      content += '\n// 编码检查\n';
+      const encodingCheckContainer = document.getElementById('encodingCheckContainer');
+      if (encodingCheckContainer) {
+        content += encodingCheckContainer.innerText + '\n';
+      }
+      
+      content += '\n// 目录分卷分章检查\n';
+      const directoryCheckContainer = document.getElementById('directoryCheckContainer');
+      if (directoryCheckContainer) {
+        content += directoryCheckContainer.innerText + '\n';
+      }
+      
+      // 添加目录格式和正文预览
+      if (currentImportingBook.vols) {
+        content += '\n// 目录格式\n';
+        const vols = currentImportingBook.vols;
+        
+        vols.forEach((vol, volIndex) => {
+          if (vols.length > 1) {
+            content += `${vol.volTitle}\n`;
+          }
+          
+          const chaptersToCopy = vol.chapters.slice(0, 10);
+          chaptersToCopy.forEach((chap, chapIndex) => {
+            content += `${chap.title}\n`;
+          });
+        });
+        
+        content += '\n// 正文预览\n';
+        content += currentImportingBook.text.substring(0, 300);
+      }
+      
+      navigator.clipboard.writeText(content).then(() => {
+        showToast('已复制书籍目录结构到剪贴板', 'success');
+      }).catch(() => {
+        showToast('复制失败，请手动复制', 'error');
+      });
+    }
+    
+    // 尝试修复编码
+    function tryFixEncoding() {
+      if (!currentImportingBook) return;
+      
+      showToast('正在尝试编码修复...', 'info');
+      
+      // 保存当前编码作为参考
+      const currentEncoding = currentImportingBook.encoding;
+      
+      // 这里可以添加iconv-lite等编码转换逻辑
+      // 目前先尝试多种常见编码，但是优先保留当前编码，或者排除当前编码
+      let encodings = ['utf-8', 'gb18030', 'gbk', 'big5'];
+      
+      // 如果当前编码在列表中，把它放到最前面
+      const currentIndex = encodings.indexOf(currentEncoding);
+      if (currentIndex > 0) {
+        encodings.splice(currentIndex, 1);
+        encodings.unshift(currentEncoding);
+      }
+      
+      let fixed = false;
+      let bestEncoding = null;
+      let bestText = null;
+      let bestChapterCount = 0;
+      
+      // 重新读取文件尝试其他编码
+      const reader = new FileReader();
+      reader.readAsArrayBuffer(currentImportingBook.file);
+      
+      reader.onload = function(e) {
+        const buffer = e.target.result;
+        const uint8Array = new Uint8Array(buffer);
+        
+        for (const enc of encodings) {
+          try {
+            const decoder = new TextDecoder(enc);
+            const text = decoder.decode(uint8Array);
+            
+            // 解析目录检查章节数量
+            let vols = [];
+            try {
+              vols = parseText(text);
+            } catch (e) {
+              continue;
+            }
+            
+            let chapterCount = 0;
+            vols.forEach(vol => {
+              chapterCount += vol.chapters.length;
+            });
+            
+            // 如果章节数量比之前更多，就用这个编码
+            if (chapterCount > bestChapterCount) {
+              bestChapterCount = chapterCount;
+              bestEncoding = enc;
+              bestText = text;
+            }
+            
+            // 如果章节数大于10，我们认为这个编码比较合适，直接使用
+            if (chapterCount >= 10) {
+              currentImportingBook.encoding = enc;
+              currentImportingBook.text = text;
+              currentImportingBook.vols = vols;
+              currentImportingBook.chapterCount = chapterCount;
+              fixed = true;
+              showToast(`已使用 ${enc} 编码重新解析，识别到 ${chapterCount} 章`, 'success');
+              renderImportCheckPage(currentImportingBook);
+              break;
+            }
+          } catch (e) {
+            continue;
+          }
+        }
+        
+        if (!fixed && bestEncoding) {
+          // 虽然没找到10章以上的，但用章节数最多的那个
+          let bestVols = parseText(bestText);
+          currentImportingBook.encoding = bestEncoding;
+          currentImportingBook.text = bestText;
+          currentImportingBook.vols = bestVols;
+          currentImportingBook.chapterCount = bestChapterCount;
+          showToast(`已使用 ${bestEncoding} 编码重新解析，识别到 ${bestChapterCount} 章`, 'success');
+          renderImportCheckPage(currentImportingBook);
+        } else if (!fixed) {
+          showToast('未能找到合适的编码，请手动检查', 'warning');
+        }
+      };
+    }
+    
+    // 删除正在导入的书籍
+    function deleteImportingBook() {
+      if (!currentImportingBook) return;
+      
+      ModalSystem.createModal({
+        title: '确认删除',
+        content: '确定要删除这本书籍吗？',
+        buttons: [
+          { text: '取消', type: 'secondary' },
+          { 
+            text: '删除', 
+            type: 'danger',
+            onClick: function() {
+              currentImportingBook = null;
+              switchToBooksPage();
+              showToast('已删除', 'success');
+            }
+          }
+        ]
+      });
+    }
+    
+    // 修改processFile函数，让它在导入前先进入检查页面
+    // 先保存原processFile函数
+    const originalProcessFile = processFile;
+    
+    // 重写processFile函数
+    function processFile(file) {
+      // 检查书籍是否已存在
+      const fileId = file.name + '_' + file.size + '_' + file.lastModified;
+      const recentFiles = JSON.parse(localStorage.getItem('reader_recent_files') || '[]');
+      const existingBook = recentFiles.find(f => f.id === fileId);
+      
+      if (existingBook) {
+        // 书籍已存在，直接打开
+        loadCachedFile(fileId, file.name);
+      } else {
+        // 新书籍，进入检查页面
+        switchToImportCheckPage(file);
+      }
+    }
+    
+    // 从检查页面完成导入后的实际处理
+    function completeImportAndRead(bookInfo) {
+      const file = bookInfo.file;
+      const fileId = bookInfo.fileId;
+      const text = bookInfo.text;
+      
+      try {
+        // 解析文件内容 - 总是重新解析以确保编码正确
+        volData = parseText(text);
+        flatChapters = flatten(volData);
+        currentIndex = 0;
+        
+        // 保存到IndexedDB
+        saveFileToIndexedDB(fileId, text).then(() => {
+          // 添加到最近文件列表
+          const recentFiles = JSON.parse(localStorage.getItem('reader_recent_files') || '[]');
+          const fileInfo = {
+            id: fileId,
+            name: file.name,
+            size: file.size,
+            lastModified: file.lastModified,
+            lastRead: new Date().getTime(),
+            chapterCount: bookInfo.chapterCount || flatChapters.length,
+            title: file.name.replace(/\.txt$/, ''),
+            encoding: bookInfo.encoding || 'utf-8'
+          };
+          
+          recentFiles.unshift(fileInfo);
+          localStorage.setItem('reader_recent_files', JSON.stringify(recentFiles));
+          
+          // 初始化阅读记录和统计
+          initBookStatistics(fileId);
+          
+          // 隐藏导入检查页面，显示阅读器
+          document.getElementById('importCheckPage').style.display = 'none';
+          appContainer.style.display = 'flex';
+          document.getElementById('booksPage').style.display = 'none';
+          
+          // 关闭所有侧边栏并恢复内容显示
+          if (sidebarLeft) {
+            sidebarLeft.classList.remove('show', 'fullscreen');
+          }
+          if (sidebarRight) {
+            sidebarRight.classList.remove('show', 'fullscreen');
+          }
+          const readingArea = document.querySelector('.reading-area');
+          const searchContainer = document.querySelector('.search-main-container');
+          if (readingArea) readingArea.classList.remove('hide-mobile');
+          if (searchContainer) searchContainer.classList.remove('hide-mobile');
+          
+          // 强制应用当前的渲染变量
+          updateLocalRenderVariables();
+          applyCurrentFontSettings();
+          
+          // 初始化界面
+          resetDirectoryLoading();
+          renderDirectory();
+          renderChapter();
+          renderFunctionContent();
+          updateProgress();
+          updateChapterJumpUI();
+          showBookTitle(file.name);
+          
+          if (window.hideNav) window.hideNav();
+          
+          setTimeout(() => {
+            initializeUIElements();
+            chapterContent = enhanceAutoPaging();
+            applyCurrentFontSettings();
+            if (window.bindChapterContentClick) window.bindChapterContentClick();
+          }, 100);
+          
+          currentFileId = fileId;
+          currentFileName = file.name;
+          saveCurrentFileInfo();
+          saveProgress();
+          
+          recordBookAccess(fileId);
+          
+          showToast(`成功解析：共${volData.length}卷，${flatChapters.length}章`, 'success');
+        }).catch(error => {
+          console.error('保存文件失败:', error);
+          showToast('保存文件失败: ' + error.message, 'error');
+        });
+      } catch (error) {
+        console.error('文件解析错误:', error);
+        showToast('文件解析错误: ' + error.message, 'error');
+      }
+    }
+    
+    // 修改confirmImport函数，使用新的完成逻辑
+    function confirmImport() {
+      const confirmBtn = document.getElementById('importConfirmBtn');
+      if (!currentImportingBook || (confirmBtn && confirmBtn.disabled)) return;
+      completeImportAndRead(currentImportingBook);
+    }
+    
+    // ===== 书籍详情页面功能 =====
+    
+    // 切换到书籍详情页面
+    function switchToBookDetailPage(bookInfo) {
+      const booksPage = document.getElementById('booksPage');
+      const bookDetailPage = document.getElementById('bookDetailPage');
+      const importCheckPage = document.getElementById('importCheckPage');
+      
+      // 清理导入状态
+      currentImportingBook = null;
+      
+      // 隐藏所有其他页面
+      if (booksPage) booksPage.style.display = 'none';
+      if (importCheckPage) importCheckPage.style.display = 'none';
+      
+      // 显示详情页面
+      bookDetailPage.style.display = 'flex';
+      
+      currentDetailBook = bookInfo;
+      
+      const fileNameWithoutExt = bookInfo.name.replace(/\.[^.]+$/, '');
+      document.getElementById('bookDetailTitle').textContent = fileNameWithoutExt + '详情';
+      
+      // 初始化图标
+      initializeNavIcons();
+      
+      renderBookDetailPage(bookInfo);
+    }
+    
+    // 渲染书籍详情页面
+    async function renderBookDetailPage(bookInfo) {
+      // 确保书籍信息完整
+      await ensureBookInfoComplete(bookInfo);
+      renderBookInfoGrid(bookInfo);
+      renderBookStats(bookInfo.id);
+      renderBookReadingHistory(bookInfo.id);
+      await renderBookDirectory(bookInfo.id);
+    }
+    
+    // 确保书籍信息完整，如果不完整则更新
+    async function ensureBookInfoComplete(bookInfo) {
+      let needsUpdate = false;
+      
+      // 尝试从文件内容中获取信息
+      try {
+        const text = await loadFileFromIndexedDB(bookInfo.id);
+        if (text) {
+          // 检查是否需要更新章节数
+          if (!bookInfo.chapterCount || bookInfo.chapterCount === '未知') {
+            const vols = parseText(text);
+            const flatChapters = flatten(vols);
+            bookInfo.chapterCount = flatChapters.length;
+            needsUpdate = true;
+          }
+          
+          // 检查是否需要更新编码
+          if (!bookInfo.encoding) {
+            // 检测编码
+            const sampleSize = Math.min(text.length, 20000);
+            const sample = text.substring(0, sampleSize);
+            let binaryString = "";
+            for (let i = 0; i < sample.length; i++) {
+              binaryString += String.fromCharCode(sample.charCodeAt(i));
+            }
+            const detected = jschardet.detect(binaryString);
+            let encoding = detected.encoding || 'utf-8';
+            if (encoding.toLowerCase() === 'gb2312' || encoding.toLowerCase() === 'ascii') {
+              encoding = 'gb18030';
+            }
+            bookInfo.encoding = encoding;
+            needsUpdate = true;
+          }
+          
+          // 如果需要更新，保存到localStorage
+          if (needsUpdate) {
+            const recentFiles = JSON.parse(localStorage.getItem('reader_recent_files') || '[]');
+            const index = recentFiles.findIndex(f => f.id === bookInfo.id);
+            if (index !== -1) {
+              recentFiles[index] = { ...recentFiles[index], ...bookInfo };
+              localStorage.setItem('reader_recent_files', JSON.stringify(recentFiles));
+            }
+          }
+        }
+      } catch (e) {
+        console.error('确保书籍信息完整时出错:', e);
+      }
+    }
+    
+    // 渲染书籍基本信息 - 修复数据显示bug
+    function renderBookInfoGrid(bookInfo) {
+      const grid = document.getElementById('bookInfoGrid');
+      
+      // 安全获取文件大小
+      let sizeKB = '未知';
+      if (bookInfo && typeof bookInfo.size === 'number' && !isNaN(bookInfo.size)) {
+        sizeKB = (bookInfo.size / 1024).toFixed(2);
+      }
+      
+      // 安全获取书名
+      let bookTitle = '未知';
+      if (bookInfo) {
+        if (bookInfo.title) {
+          bookTitle = bookInfo.title;
+        } else if (bookInfo.name) {
+          bookTitle = bookInfo.name.replace(/\.[^.]+$/, '');
+        }
+      }
+      
+      // 安全获取章节数量
+      let chapterCount = '未知';
+      if (bookInfo && bookInfo.chapterCount && typeof bookInfo.chapterCount === 'number' && !isNaN(bookInfo.chapterCount)) {
+        chapterCount = bookInfo.chapterCount;
+      }
+      
+      // 获取人名数量
+      let nameCount = 0;
+      if (bookInfo && bookInfo.id) {
+        const progressData = localStorage.getItem('reader_progress_' + bookInfo.id);
+        if (progressData) {
+          try {
+            const data = JSON.parse(progressData);
+            if (data.nameGroups && typeof data.nameGroups === 'object') {
+              for (const groupId in data.nameGroups) {
+                const group = data.nameGroups[groupId];
+                if (group && group.names && Array.isArray(group.names)) {
+                  nameCount += group.names.length;
+                }
+              }
+            }
+            if (data.currentNames && Array.isArray(data.currentNames)) {
+              nameCount += data.currentNames.length;
+            }
+          } catch (e) {
+            console.error('解析人名数据失败:', e);
+          }
+        }
+      }
+      
+      // 获取书籍编码
+      let encoding = '未知';
+      if (bookInfo && bookInfo.encoding) {
+        encoding = bookInfo.encoding;
+      }
+      
+      grid.innerHTML = `
+        <div class="info-item">
+          <div class="info-item-label">书名</div>
+          <div class="info-item-value">${bookTitle}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-item-label">章节数量</div>
+          <div class="info-item-value">${chapterCount}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-item-label">人名数量</div>
+          <div class="info-item-value">${nameCount}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-item-label">书籍编码</div>
+          <div class="info-item-value">${encoding}</div>
+        </div>
+      `;
+    }
+    
+    // 切换详情页面tab
+    function switchDetailTab(tabName) {
+      const tabs = document.querySelectorAll('.book-detail-tab');
+      const tabContents = document.querySelectorAll('.book-detail-tab-content');
+      
+      tabs.forEach(tab => {
+        tab.classList.remove('active');
+        if (tab.dataset.tab === tabName) {
+          tab.classList.add('active');
+        }
+      });
+      
+      tabContents.forEach(content => {
+        content.classList.remove('active');
+      });
+      
+      document.getElementById('detailTab' + tabName.charAt(0).toUpperCase() + tabName.slice(1)).classList.add('active');
+    }
+    
+    // 初始化书籍统计数据
+    function initBookStatistics(fileId) {
+      const statsKey = 'reader_book_stats_' + fileId;
+      if (!localStorage.getItem(statsKey)) {
+        const stats = {
+          accessCount: 0,
+          readingDates: [],
+          firstAccessDate: new Date().getTime(),
+          totalReadingDays: 0
+        };
+        localStorage.setItem(statsKey, JSON.stringify(stats));
+      }
+    }
+    
+    // 记录书籍访问
+    function recordBookAccess(fileId) {
+      const statsKey = 'reader_book_stats_' + fileId;
+      let stats = JSON.parse(localStorage.getItem(statsKey) || '{}');
+      
+      if (!stats.accessCount) stats.accessCount = 0;
+      if (!stats.readingDates) stats.readingDates = [];
+      if (!stats.firstAccessDate) stats.firstAccessDate = new Date().getTime();
+      
+      stats.accessCount++;
+      
+      const today = new Date().toDateString();
+      if (!stats.readingDates.includes(today)) {
+        stats.readingDates.push(today);
+      }
+      
+      stats.totalReadingDays = stats.readingDates.length;
+      stats.lastAccessDate = new Date().getTime();
+      
+      localStorage.setItem(statsKey, JSON.stringify(stats));
+    }
+    
+    // 渲染书籍统计信息
+    function renderBookStats(fileId) {
+      const container = document.getElementById('bookStatsContainer');
+      const statsKey = 'reader_book_stats_' + fileId;
+      const stats = JSON.parse(localStorage.getItem(statsKey) || '{}');
+      
+      const accessCount = stats.accessCount || 0;
+      const totalReadingDays = stats.totalReadingDays || 0;
+      const firstAccessDate = stats.firstAccessDate ? new Date(stats.firstAccessDate).toLocaleDateString() : '未知';
+      
+      container.innerHTML = `
+        <div class="stat-grid">
+          <div class="stat-item">
+            <div class="stat-value">${accessCount}</div>
+            <div class="stat-label">访问次数</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value">${totalReadingDays}</div>
+            <div class="stat-label">阅读天数</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value">${firstAccessDate}</div>
+            <div class="stat-label">首次阅读</div>
+          </div>
+        </div>
+      `;
+    }
+    
+    // 渲染阅读记录
+    function renderBookReadingHistory(fileId) {
+      const container = document.getElementById('bookReadingHistory');
+      const statsKey = 'reader_book_stats_' + fileId;
+      const stats = JSON.parse(localStorage.getItem(statsKey) || '{}');
+      
+      const readingDates = stats.readingDates || [];
+      
+      if (readingDates.length === 0) {
+        container.innerHTML = '<div class="check-detail">暂无阅读记录</div>';
+        return;
+      }
+      
+      const sortedDates = [...readingDates].reverse().slice(0, 10);
+      
+      container.innerHTML = `
+        <div class="reading-history-list">
+          ${sortedDates.map(dateStr => {
+            const date = new Date(dateStr);
+            return `
+              <div class="history-item">
+                <div>${date.toLocaleDateString('zh-CN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
+                <div class="history-date">${date.toLocaleTimeString()}</div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+    
+    // 渲染书籍目录 - 禁用点击
+    async function renderBookDirectory(fileId) {
+      const container = document.getElementById('bookDirectoryContainer');
+      
+      try {
+        const text = await loadFileFromIndexedDB(fileId);
+        if (!text) {
+          container.innerHTML = '<div class="check-detail">无法加载书籍内容</div>';
+          return;
+        }
+        
+        const vols = parseText(text);
+        
+        let html = '<div class="book-directory-list">';
+        
+        vols.forEach((vol, volIndex) => {
+          if (vols.length > 1) {
+            html += `<div class="volume-title" style="padding: 12px 0; font-weight: 600; color: var(--nav-text);">${vol.volTitle}</div>`;
+          }
+          
+          vol.chapters.forEach((chap, chapIndex) => {
+            html += `<div class="book-directory-item" style="cursor: default;">${chap.title}</div>`;
+          });
+        });
+        
+        html += '</div>';
+        container.innerHTML = html;
+        
+        currentDetailBook.vols = vols;
+      } catch (error) {
+        console.error('加载目录失败:', error);
+        container.innerHTML = '<div class="check-detail">加载目录失败</div>';
+      }
+    }
+    
+    // 从详情页打开书籍
+    function openBookFromDetail(volIndex = 0, chapIndex = 0) {
+      if (!currentDetailBook) return;
+      
+      // 隐藏详情页面
+      const bookDetailPage = document.getElementById('bookDetailPage');
+      if (bookDetailPage) {
+        bookDetailPage.style.display = 'none';
+      }
+      
+      recordBookAccess(currentDetailBook.id);
+      loadCachedFile(currentDetailBook.id, currentDetailBook.name);
+    }
+    
+    // 修改createBookCard函数，添加点击进入详情页的功能
+    // 先找到原createBookCard函数并修改
